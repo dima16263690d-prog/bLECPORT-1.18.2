@@ -1,0 +1,97 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  it.unimi.dsi.fastutil.ints.Int2ObjectMap
+ *  it.unimi.dsi.fastutil.ints.Int2ObjectMaps
+ *  it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+ */
+package net.minecraft.network.protocol.game;
+
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import java.util.function.IntFunction;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ServerGamePacketListener;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.item.ItemStack;
+
+public class ServerboundContainerClickPacket
+implements Packet<ServerGamePacketListener> {
+    private static final int MAX_SLOT_COUNT = 128;
+    private final int containerId;
+    private final int stateId;
+    private final int slotNum;
+    private final int buttonNum;
+    private final ClickType clickType;
+    private final ItemStack carriedItem;
+    private final Int2ObjectMap<ItemStack> changedSlots;
+
+    public ServerboundContainerClickPacket(int n, int n2, int n3, int n4, ClickType clickType, ItemStack itemStack, Int2ObjectMap<ItemStack> int2ObjectMap) {
+        this.containerId = n;
+        this.stateId = n2;
+        this.slotNum = n3;
+        this.buttonNum = n4;
+        this.clickType = clickType;
+        this.carriedItem = itemStack;
+        this.changedSlots = Int2ObjectMaps.unmodifiable(int2ObjectMap);
+    }
+
+    public ServerboundContainerClickPacket(FriendlyByteBuf friendlyByteBuf2) {
+        this.containerId = friendlyByteBuf2.readByte();
+        this.stateId = friendlyByteBuf2.readVarInt();
+        this.slotNum = friendlyByteBuf2.readShort();
+        this.buttonNum = friendlyByteBuf2.readByte();
+        this.clickType = friendlyByteBuf2.readEnum(ClickType.class);
+        IntFunction<Int2ObjectOpenHashMap> intFunction = FriendlyByteBuf.limitValue(Int2ObjectOpenHashMap::new, 128);
+        this.changedSlots = Int2ObjectMaps.unmodifiable((Int2ObjectMap)((Int2ObjectMap)friendlyByteBuf2.readMap(intFunction, friendlyByteBuf -> friendlyByteBuf.readShort(), FriendlyByteBuf::readItem)));
+        this.carriedItem = friendlyByteBuf2.readItem();
+    }
+
+    @Override
+    public void write(FriendlyByteBuf friendlyByteBuf) {
+        friendlyByteBuf.writeByte(this.containerId);
+        friendlyByteBuf.writeVarInt(this.stateId);
+        friendlyByteBuf.writeShort(this.slotNum);
+        friendlyByteBuf.writeByte(this.buttonNum);
+        friendlyByteBuf.writeEnum(this.clickType);
+        friendlyByteBuf.writeMap(this.changedSlots, FriendlyByteBuf::writeShort, FriendlyByteBuf::writeItem);
+        friendlyByteBuf.writeItem(this.carriedItem);
+    }
+
+    @Override
+    public void handle(ServerGamePacketListener serverGamePacketListener) {
+        serverGamePacketListener.handleContainerClick(this);
+    }
+
+    public int getContainerId() {
+        return this.containerId;
+    }
+
+    public int getSlotNum() {
+        return this.slotNum;
+    }
+
+    public int getButtonNum() {
+        return this.buttonNum;
+    }
+
+    public ItemStack getCarriedItem() {
+        return this.carriedItem;
+    }
+
+    public Int2ObjectMap<ItemStack> getChangedSlots() {
+        return this.changedSlots;
+    }
+
+    public ClickType getClickType() {
+        return this.clickType;
+    }
+
+    public int getStateId() {
+        return this.stateId;
+    }
+}
+

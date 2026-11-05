@@ -1,0 +1,89 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.common.collect.ImmutableList
+ *  com.google.common.collect.Iterables
+ *  com.google.common.collect.Streams
+ *  org.apache.commons.lang3.mutable.MutableInt
+ */
+package net.minecraft.gametest.framework;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Streams;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestBatch;
+import net.minecraft.gametest.framework.GameTestBatchRunner;
+import net.minecraft.gametest.framework.GameTestInfo;
+import net.minecraft.gametest.framework.GameTestRegistry;
+import net.minecraft.gametest.framework.GameTestTicker;
+import net.minecraft.gametest.framework.ReportGameListener;
+import net.minecraft.gametest.framework.StructureUtils;
+import net.minecraft.gametest.framework.TestFunction;
+import net.minecraft.network.protocol.game.DebugPackets;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.StructureBlockEntity;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import org.apache.commons.lang3.mutable.MutableInt;
+
+public class GameTestRunner {
+    private static final int MAX_TESTS_PER_BATCH = 100;
+    public static final int PADDING_AROUND_EACH_STRUCTURE = 2;
+    public static final int SPACE_BETWEEN_COLUMNS = 5;
+    public static final int SPACE_BETWEEN_ROWS = 6;
+    public static final int DEFAULT_TESTS_PER_ROW = 8;
+
+    public static void runTest(GameTestInfo gameTestInfo, BlockPos blockPos, GameTestTicker gameTestTicker) {
+        gameTestInfo.startExecution();
+        gameTestTicker.add(gameTestInfo);
+        gameTestInfo.addListener(new ReportGameListener(gameTestInfo, gameTestTicker, blockPos));
+        gameTestInfo.spawnStructure(blockPos, 2);
+    }
+
+    public static Collection<GameTestInfo> runTestBatches(Collection<GameTestBatch> collection, BlockPos blockPos, Rotation rotation, ServerLevel serverLevel, GameTestTicker gameTestTicker, int n) {
+        GameTestBatchRunner gameTestBatchRunner = new GameTestBatchRunner(collection, blockPos, rotation, serverLevel, gameTestTicker, n);
+        gameTestBatchRunner.start();
+        return gameTestBatchRunner.getTestInfos();
+    }
+
+    public static Collection<GameTestInfo> runTests(Collection<TestFunction> collection, BlockPos blockPos, Rotation rotation, ServerLevel serverLevel, GameTestTicker gameTestTicker, int n) {
+        return GameTestRunner.runTestBatches(GameTestRunner.groupTestsIntoBatches(collection), blockPos, rotation, serverLevel, gameTestTicker, n);
+    }
+
+    public static Collection<GameTestBatch> groupTestsIntoBatches(Collection<TestFunction> collection) {
+        Map<String, List<TestFunction>> map = collection.stream().collect(Collectors.groupingBy(TestFunction::getBatchName));
+        return (Collection)map.entrySet().stream().flatMap(entry -> {
+            String string = (String)entry.getKey();
+            Consumer<ServerLevel> consumer = GameTestRegistry.getBeforeBatchFunction(string);
+            Consumer<ServerLevel> consumer2 = GameTestRegistry.getAfterBatchFunction(string);
+            MutableInt mutableInt = new MutableInt();
+            Collection collection = (Collection)entry.getValue();
+            return Streams.stream((Iterable)Iterables.partition((Iterable)collection, (int)100)).map(list -> new GameTestBatch(string + ":" + mutableInt.incrementAndGet(), (Collection<TestFunction>)ImmutableList.copyOf((Collection)list), consumer, consumer2));
+        }).collect(ImmutableList.toImmutableList());
+    }
+
+    public static void clearAllTests(ServerLevel serverLevel, BlockPos blockPos2, GameTestTicker gameTestTicker, int n) {
+        gameTestTicker.clear();
+        BlockPos blockPos3 = blockPos2.offset(-n, 0, -n);
+        BlockPos blockPos4 = blockPos2.offset(n, 0, n);
+        BlockPos.betweenClosedStream(blockPos3, blockPos4).filter(blockPos -> serverLevel.getBlockState((BlockPos)blockPos).is(Blocks.STRUCTURE_BLOCK)).forEach(blockPos -> {
+            StructureBlockEntity structureBlockEntity = (StructureBlockEntity)serverLevel.getBlockEntity((BlockPos)blockPos);
+            BlockPos blockPos2 = structureBlockEntity.getBlockPos();
+            BoundingBox boundingBox = StructureUtils.getStructureBoundingBox(structureBlockEntity);
+            StructureUtils.clearSpaceForStructure(boundingBox, blockPos2.getY(), serverLevel);
+        });
+    }
+
+    public static void clearMarkers(ServerLevel serverLevel) {
+        DebugPackets.sendGameTestClearPacket(serverLevel);
+    }
+}
+

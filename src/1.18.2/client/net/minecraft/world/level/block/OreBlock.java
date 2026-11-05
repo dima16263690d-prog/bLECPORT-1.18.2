@@ -1,0 +1,38 @@
+/*
+ * Decompiled with CFR 0.152.
+ */
+package net.minecraft.world.level.block;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.valueproviders.UniformInt;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+
+public class OreBlock
+extends Block {
+    private final UniformInt xpRange;
+
+    public OreBlock(BlockBehaviour.Properties properties) {
+        this(properties, UniformInt.of(0, 0));
+    }
+
+    public OreBlock(BlockBehaviour.Properties properties, UniformInt uniformInt) {
+        super(properties);
+        this.xpRange = uniformInt;
+    }
+
+    @Override
+    public void spawnAfterBreak(BlockState blockState, ServerLevel serverLevel, BlockPos blockPos, ItemStack itemStack) {
+        int n;
+        super.spawnAfterBreak(blockState, serverLevel, blockPos, itemStack);
+        if (EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, itemStack) == 0 && (n = this.xpRange.sample(serverLevel.random)) > 0) {
+            this.popExperience(serverLevel, blockPos, n);
+        }
+    }
+}
+

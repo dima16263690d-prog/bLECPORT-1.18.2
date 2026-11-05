@@ -1,0 +1,433 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.common.collect.Maps
+ *  com.mojang.brigadier.ImmutableStringReader
+ *  com.mojang.brigadier.Message
+ *  com.mojang.brigadier.StringReader
+ *  com.mojang.brigadier.exceptions.CommandSyntaxException
+ *  com.mojang.brigadier.exceptions.Dynamic2CommandExceptionType
+ *  com.mojang.brigadier.exceptions.Dynamic3CommandExceptionType
+ *  com.mojang.brigadier.exceptions.DynamicCommandExceptionType
+ *  com.mojang.brigadier.exceptions.SimpleCommandExceptionType
+ *  com.mojang.brigadier.suggestion.Suggestions
+ *  com.mojang.brigadier.suggestion.SuggestionsBuilder
+ *  javax.annotation.Nullable
+ */
+package net.minecraft.commands.arguments.blocks;
+
+import com.google.common.collect.Maps;
+import com.mojang.brigadier.ImmutableStringReader;
+import com.mojang.brigadier.Message;
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.Dynamic2CommandExceptionType;
+import com.mojang.brigadier.exceptions.Dynamic3CommandExceptionType;
+import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
+import javax.annotation.Nullable;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.Property;
+
+public class BlockStateParser {
+    public static final SimpleCommandExceptionType ERROR_NO_TAGS_ALLOWED = new SimpleCommandExceptionType((Message)new TranslatableComponent("argument.block.tag.disallowed"));
+    public static final DynamicCommandExceptionType ERROR_UNKNOWN_BLOCK = new DynamicCommandExceptionType(object -> new TranslatableComponent("argument.block.id.invalid", object));
+    public static final Dynamic2CommandExceptionType ERROR_UNKNOWN_PROPERTY = new Dynamic2CommandExceptionType((object, object2) -> new TranslatableComponent("argument.block.property.unknown", object, object2));
+    public static final Dynamic2CommandExceptionType ERROR_DUPLICATE_PROPERTY = new Dynamic2CommandExceptionType((object, object2) -> new TranslatableComponent("argument.block.property.duplicate", object2, object));
+    public static final Dynamic3CommandExceptionType ERROR_INVALID_VALUE = new Dynamic3CommandExceptionType((object, object2, object3) -> new TranslatableComponent("argument.block.property.invalid", object, object3, object2));
+    public static final Dynamic2CommandExceptionType ERROR_EXPECTED_VALUE = new Dynamic2CommandExceptionType((object, object2) -> new TranslatableComponent("argument.block.property.novalue", object, object2));
+    public static final SimpleCommandExceptionType ERROR_EXPECTED_END_OF_PROPERTIES = new SimpleCommandExceptionType((Message)new TranslatableComponent("argument.block.property.unclosed"));
+    private static final char SYNTAX_START_PROPERTIES = '[';
+    private static final char SYNTAX_START_NBT = '{';
+    private static final char SYNTAX_END_PROPERTIES = ']';
+    private static final char SYNTAX_EQUALS = '=';
+    private static final char SYNTAX_PROPERTY_SEPARATOR = ',';
+    private static final char SYNTAX_TAG = '#';
+    private static final BiFunction<SuggestionsBuilder, Registry<Block>, CompletableFuture<Suggestions>> SUGGEST_NOTHING = (suggestionsBuilder, registry) -> suggestionsBuilder.buildFuture();
+    private final StringReader reader;
+    private final boolean forTesting;
+    private final Map<Property<?>, Comparable<?>> properties = Maps.newHashMap();
+    private final Map<String, String> vagueProperties = Maps.newHashMap();
+    private ResourceLocation id = new ResourceLocation("");
+    private StateDefinition<Block, BlockState> definition;
+    private BlockState state;
+    @Nullable
+    private CompoundTag nbt;
+    @Nullable
+    private TagKey<Block> tag;
+    private int tagCursor;
+    private BiFunction<SuggestionsBuilder, Registry<Block>, CompletableFuture<Suggestions>> suggestions = SUGGEST_NOTHING;
+
+    public BlockStateParser(StringReader stringReader, boolean bl) {
+        this.reader = stringReader;
+        this.forTesting = bl;
+    }
+
+    public Map<Property<?>, Comparable<?>> getProperties() {
+        return this.properties;
+    }
+
+    @Nullable
+    public BlockState getState() {
+        return this.state;
+    }
+
+    @Nullable
+    public CompoundTag getNbt() {
+        return this.nbt;
+    }
+
+    @Nullable
+    public TagKey<Block> getTag() {
+        return this.tag;
+    }
+
+    public BlockStateParser parse(boolean bl) throws CommandSyntaxException {
+        this.suggestions = this::suggestBlockIdOrTag;
+        if (this.reader.canRead() && this.reader.peek() == '#') {
+            this.readTag();
+            this.suggestions = this::suggestOpenVaguePropertiesOrNbt;
+            if (this.reader.canRead() && this.reader.peek() == '[') {
+                this.readVagueProperties();
+                this.suggestions = this::suggestOpenNbt;
+            }
+        } else {
+            this.readBlock();
+            this.suggestions = this::suggestOpenPropertiesOrNbt;
+            if (this.reader.canRead() && this.reader.peek() == '[') {
+                this.readProperties();
+                this.suggestions = this::suggestOpenNbt;
+            }
+        }
+        if (bl && this.reader.canRead() && this.reader.peek() == '{') {
+            this.suggestions = SUGGEST_NOTHING;
+            this.readNbt();
+        }
+        return this;
+    }
+
+    private CompletableFuture<Suggestions> suggestPropertyNameOrEnd(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (suggestionsBuilder.getRemaining().isEmpty()) {
+            suggestionsBuilder.suggest(String.valueOf(']'));
+        }
+        return this.suggestPropertyName(suggestionsBuilder, registry);
+    }
+
+    private CompletableFuture<Suggestions> suggestVaguePropertyNameOrEnd(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (suggestionsBuilder.getRemaining().isEmpty()) {
+            suggestionsBuilder.suggest(String.valueOf(']'));
+        }
+        return this.suggestVaguePropertyName(suggestionsBuilder, registry);
+    }
+
+    private CompletableFuture<Suggestions> suggestPropertyName(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        String string = suggestionsBuilder.getRemaining().toLowerCase(Locale.ROOT);
+        for (Property<?> property : this.state.getProperties()) {
+            if (this.properties.containsKey(property) || !property.getName().startsWith(string)) continue;
+            suggestionsBuilder.suggest(property.getName() + "=");
+        }
+        return suggestionsBuilder.buildFuture();
+    }
+
+    private CompletableFuture<Suggestions> suggestVaguePropertyName(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        String string = suggestionsBuilder.getRemaining().toLowerCase(Locale.ROOT);
+        if (this.tag != null) {
+            for (Holder<Block> holder : registry.getTagOrEmpty(this.tag)) {
+                for (Property<?> property : holder.value().getStateDefinition().getProperties()) {
+                    if (this.vagueProperties.containsKey(property.getName()) || !property.getName().startsWith(string)) continue;
+                    suggestionsBuilder.suggest(property.getName() + "=");
+                }
+            }
+        }
+        return suggestionsBuilder.buildFuture();
+    }
+
+    private CompletableFuture<Suggestions> suggestOpenNbt(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (suggestionsBuilder.getRemaining().isEmpty() && this.hasBlockEntity(registry)) {
+            suggestionsBuilder.suggest(String.valueOf('{'));
+        }
+        return suggestionsBuilder.buildFuture();
+    }
+
+    private boolean hasBlockEntity(Registry<Block> registry) {
+        if (this.state != null) {
+            return this.state.hasBlockEntity();
+        }
+        if (this.tag != null) {
+            for (Holder<Block> holder : registry.getTagOrEmpty(this.tag)) {
+                if (!holder.value().defaultBlockState().hasBlockEntity()) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CompletableFuture<Suggestions> suggestEquals(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (suggestionsBuilder.getRemaining().isEmpty()) {
+            suggestionsBuilder.suggest(String.valueOf('='));
+        }
+        return suggestionsBuilder.buildFuture();
+    }
+
+    private CompletableFuture<Suggestions> suggestNextPropertyOrEnd(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (suggestionsBuilder.getRemaining().isEmpty()) {
+            suggestionsBuilder.suggest(String.valueOf(']'));
+        }
+        if (suggestionsBuilder.getRemaining().isEmpty() && this.properties.size() < this.state.getProperties().size()) {
+            suggestionsBuilder.suggest(String.valueOf(','));
+        }
+        return suggestionsBuilder.buildFuture();
+    }
+
+    private static <T extends Comparable<T>> SuggestionsBuilder addSuggestions(SuggestionsBuilder suggestionsBuilder, Property<T> property) {
+        for (Comparable comparable : property.getPossibleValues()) {
+            if (comparable instanceof Integer) {
+                suggestionsBuilder.suggest(((Integer)comparable).intValue());
+                continue;
+            }
+            suggestionsBuilder.suggest(property.getName(comparable));
+        }
+        return suggestionsBuilder;
+    }
+
+    private CompletableFuture<Suggestions> suggestVaguePropertyValue(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry, String string) {
+        boolean bl = false;
+        if (this.tag != null) {
+            block0: for (Holder<Block> holder : registry.getTagOrEmpty(this.tag)) {
+                Block block = holder.value();
+                Property<?> property = block.getStateDefinition().getProperty(string);
+                if (property != null) {
+                    BlockStateParser.addSuggestions(suggestionsBuilder, property);
+                }
+                if (bl) continue;
+                for (Property<?> property2 : block.getStateDefinition().getProperties()) {
+                    if (this.vagueProperties.containsKey(property2.getName())) continue;
+                    bl = true;
+                    continue block0;
+                }
+            }
+        }
+        if (bl) {
+            suggestionsBuilder.suggest(String.valueOf(','));
+        }
+        suggestionsBuilder.suggest(String.valueOf(']'));
+        return suggestionsBuilder.buildFuture();
+    }
+
+    private CompletableFuture<Suggestions> suggestOpenVaguePropertiesOrNbt(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (suggestionsBuilder.getRemaining().isEmpty() && this.tag != null) {
+            Holder<Block> holder;
+            Block block;
+            boolean bl = false;
+            boolean bl2 = false;
+            Iterator<Holder<Block>> iterator = registry.getTagOrEmpty(this.tag).iterator();
+            while (!(!iterator.hasNext() || (bl |= !(block = (holder = iterator.next()).value()).getStateDefinition().getProperties().isEmpty()) && (bl2 |= block.defaultBlockState().hasBlockEntity()))) {
+            }
+            if (bl) {
+                suggestionsBuilder.suggest(String.valueOf('['));
+            }
+            if (bl2) {
+                suggestionsBuilder.suggest(String.valueOf('{'));
+            }
+        }
+        return this.suggestTag(suggestionsBuilder, registry);
+    }
+
+    private CompletableFuture<Suggestions> suggestOpenPropertiesOrNbt(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (suggestionsBuilder.getRemaining().isEmpty()) {
+            if (!this.state.getBlock().getStateDefinition().getProperties().isEmpty()) {
+                suggestionsBuilder.suggest(String.valueOf('['));
+            }
+            if (this.state.hasBlockEntity()) {
+                suggestionsBuilder.suggest(String.valueOf('{'));
+            }
+        }
+        return suggestionsBuilder.buildFuture();
+    }
+
+    private CompletableFuture<Suggestions> suggestTag(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        return SharedSuggestionProvider.suggestResource(registry.getTagNames().map(TagKey::location), suggestionsBuilder.createOffset(this.tagCursor).add(suggestionsBuilder));
+    }
+
+    private CompletableFuture<Suggestions> suggestBlockIdOrTag(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        if (this.forTesting) {
+            SharedSuggestionProvider.suggestResource(registry.getTagNames().map(TagKey::location), suggestionsBuilder, String.valueOf('#'));
+        }
+        SharedSuggestionProvider.suggestResource(registry.keySet(), suggestionsBuilder);
+        return suggestionsBuilder.buildFuture();
+    }
+
+    public void readBlock() throws CommandSyntaxException {
+        int n = this.reader.getCursor();
+        this.id = ResourceLocation.read(this.reader);
+        Block block = Registry.BLOCK.getOptional(this.id).orElseThrow(() -> {
+            this.reader.setCursor(n);
+            return ERROR_UNKNOWN_BLOCK.createWithContext((ImmutableStringReader)this.reader, (Object)this.id.toString());
+        });
+        this.definition = block.getStateDefinition();
+        this.state = block.defaultBlockState();
+    }
+
+    public void readTag() throws CommandSyntaxException {
+        if (!this.forTesting) {
+            throw ERROR_NO_TAGS_ALLOWED.create();
+        }
+        this.suggestions = this::suggestTag;
+        this.reader.expect('#');
+        this.tagCursor = this.reader.getCursor();
+        this.tag = TagKey.create(Registry.BLOCK_REGISTRY, ResourceLocation.read(this.reader));
+    }
+
+    public void readProperties() throws CommandSyntaxException {
+        this.reader.skip();
+        this.suggestions = this::suggestPropertyNameOrEnd;
+        this.reader.skipWhitespace();
+        while (this.reader.canRead() && this.reader.peek() != ']') {
+            this.reader.skipWhitespace();
+            int n = this.reader.getCursor();
+            String string = this.reader.readString();
+            Property<?> property = this.definition.getProperty(string);
+            if (property == null) {
+                this.reader.setCursor(n);
+                throw ERROR_UNKNOWN_PROPERTY.createWithContext((ImmutableStringReader)this.reader, (Object)this.id.toString(), (Object)string);
+            }
+            if (this.properties.containsKey(property)) {
+                this.reader.setCursor(n);
+                throw ERROR_DUPLICATE_PROPERTY.createWithContext((ImmutableStringReader)this.reader, (Object)this.id.toString(), (Object)string);
+            }
+            this.reader.skipWhitespace();
+            this.suggestions = this::suggestEquals;
+            if (!this.reader.canRead() || this.reader.peek() != '=') {
+                throw ERROR_EXPECTED_VALUE.createWithContext((ImmutableStringReader)this.reader, (Object)this.id.toString(), (Object)string);
+            }
+            this.reader.skip();
+            this.reader.skipWhitespace();
+            this.suggestions = (suggestionsBuilder, registry) -> BlockStateParser.addSuggestions(suggestionsBuilder, property).buildFuture();
+            int n2 = this.reader.getCursor();
+            this.setValue(property, this.reader.readString(), n2);
+            this.suggestions = this::suggestNextPropertyOrEnd;
+            this.reader.skipWhitespace();
+            if (!this.reader.canRead()) continue;
+            if (this.reader.peek() == ',') {
+                this.reader.skip();
+                this.suggestions = this::suggestPropertyName;
+                continue;
+            }
+            if (this.reader.peek() == ']') break;
+            throw ERROR_EXPECTED_END_OF_PROPERTIES.createWithContext((ImmutableStringReader)this.reader);
+        }
+        if (!this.reader.canRead()) {
+            throw ERROR_EXPECTED_END_OF_PROPERTIES.createWithContext((ImmutableStringReader)this.reader);
+        }
+        this.reader.skip();
+    }
+
+    public void readVagueProperties() throws CommandSyntaxException {
+        this.reader.skip();
+        this.suggestions = this::suggestVaguePropertyNameOrEnd;
+        int n = -1;
+        this.reader.skipWhitespace();
+        while (this.reader.canRead() && this.reader.peek() != ']') {
+            this.reader.skipWhitespace();
+            int n2 = this.reader.getCursor();
+            String string = this.reader.readString();
+            if (this.vagueProperties.containsKey(string)) {
+                this.reader.setCursor(n2);
+                throw ERROR_DUPLICATE_PROPERTY.createWithContext((ImmutableStringReader)this.reader, (Object)this.id.toString(), (Object)string);
+            }
+            this.reader.skipWhitespace();
+            if (!this.reader.canRead() || this.reader.peek() != '=') {
+                this.reader.setCursor(n2);
+                throw ERROR_EXPECTED_VALUE.createWithContext((ImmutableStringReader)this.reader, (Object)this.id.toString(), (Object)string);
+            }
+            this.reader.skip();
+            this.reader.skipWhitespace();
+            this.suggestions = (suggestionsBuilder, registry) -> this.suggestVaguePropertyValue((SuggestionsBuilder)suggestionsBuilder, (Registry<Block>)registry, string);
+            n = this.reader.getCursor();
+            String string2 = this.reader.readString();
+            this.vagueProperties.put(string, string2);
+            this.reader.skipWhitespace();
+            if (!this.reader.canRead()) continue;
+            n = -1;
+            if (this.reader.peek() == ',') {
+                this.reader.skip();
+                this.suggestions = this::suggestVaguePropertyName;
+                continue;
+            }
+            if (this.reader.peek() == ']') break;
+            throw ERROR_EXPECTED_END_OF_PROPERTIES.createWithContext((ImmutableStringReader)this.reader);
+        }
+        if (!this.reader.canRead()) {
+            if (n >= 0) {
+                this.reader.setCursor(n);
+            }
+            throw ERROR_EXPECTED_END_OF_PROPERTIES.createWithContext((ImmutableStringReader)this.reader);
+        }
+        this.reader.skip();
+    }
+
+    public void readNbt() throws CommandSyntaxException {
+        this.nbt = new TagParser(this.reader).readStruct();
+    }
+
+    private <T extends Comparable<T>> void setValue(Property<T> property, String string, int n) throws CommandSyntaxException {
+        Optional<T> optional = property.getValue(string);
+        if (!optional.isPresent()) {
+            this.reader.setCursor(n);
+            throw ERROR_INVALID_VALUE.createWithContext((ImmutableStringReader)this.reader, (Object)this.id.toString(), (Object)property.getName(), (Object)string);
+        }
+        this.state = (BlockState)this.state.setValue(property, (Comparable)optional.get());
+        this.properties.put(property, (Comparable)optional.get());
+    }
+
+    public static String serialize(BlockState blockState) {
+        StringBuilder stringBuilder = new StringBuilder(Registry.BLOCK.getKey(blockState.getBlock()).toString());
+        if (!blockState.getProperties().isEmpty()) {
+            stringBuilder.append('[');
+            boolean bl = false;
+            for (Map.Entry entry : blockState.getValues().entrySet()) {
+                if (bl) {
+                    stringBuilder.append(',');
+                }
+                BlockStateParser.appendProperty(stringBuilder, (Property)entry.getKey(), (Comparable)entry.getValue());
+                bl = true;
+            }
+            stringBuilder.append(']');
+        }
+        return stringBuilder.toString();
+    }
+
+    private static <T extends Comparable<T>> void appendProperty(StringBuilder stringBuilder, Property<T> property, Comparable<?> comparable) {
+        stringBuilder.append(property.getName());
+        stringBuilder.append('=');
+        stringBuilder.append(property.getName(comparable));
+    }
+
+    public CompletableFuture<Suggestions> fillSuggestions(SuggestionsBuilder suggestionsBuilder, Registry<Block> registry) {
+        return this.suggestions.apply(suggestionsBuilder.createOffset(this.reader.getCursor()), registry);
+    }
+
+    public Map<String, String> getVagueProperties() {
+        return this.vagueProperties;
+    }
+}
+

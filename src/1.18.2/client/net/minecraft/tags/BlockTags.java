@@ -1,0 +1,153 @@
+/*
+ * Decompiled with CFR 0.152.
+ */
+package net.minecraft.tags;
+
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.block.Block;
+
+public final class BlockTags {
+    public static final TagKey<Block> WOOL = BlockTags.create("wool");
+    public static final TagKey<Block> PLANKS = BlockTags.create("planks");
+    public static final TagKey<Block> STONE_BRICKS = BlockTags.create("stone_bricks");
+    public static final TagKey<Block> WOODEN_BUTTONS = BlockTags.create("wooden_buttons");
+    public static final TagKey<Block> BUTTONS = BlockTags.create("buttons");
+    public static final TagKey<Block> CARPETS = BlockTags.create("carpets");
+    public static final TagKey<Block> WOODEN_DOORS = BlockTags.create("wooden_doors");
+    public static final TagKey<Block> WOODEN_STAIRS = BlockTags.create("wooden_stairs");
+    public static final TagKey<Block> WOODEN_SLABS = BlockTags.create("wooden_slabs");
+    public static final TagKey<Block> WOODEN_FENCES = BlockTags.create("wooden_fences");
+    public static final TagKey<Block> PRESSURE_PLATES = BlockTags.create("pressure_plates");
+    public static final TagKey<Block> WOODEN_PRESSURE_PLATES = BlockTags.create("wooden_pressure_plates");
+    public static final TagKey<Block> STONE_PRESSURE_PLATES = BlockTags.create("stone_pressure_plates");
+    public static final TagKey<Block> WOODEN_TRAPDOORS = BlockTags.create("wooden_trapdoors");
+    public static final TagKey<Block> DOORS = BlockTags.create("doors");
+    public static final TagKey<Block> SAPLINGS = BlockTags.create("saplings");
+    public static final TagKey<Block> LOGS_THAT_BURN = BlockTags.create("logs_that_burn");
+    public static final TagKey<Block> LOGS = BlockTags.create("logs");
+    public static final TagKey<Block> DARK_OAK_LOGS = BlockTags.create("dark_oak_logs");
+    public static final TagKey<Block> OAK_LOGS = BlockTags.create("oak_logs");
+    public static final TagKey<Block> BIRCH_LOGS = BlockTags.create("birch_logs");
+    public static final TagKey<Block> ACACIA_LOGS = BlockTags.create("acacia_logs");
+    public static final TagKey<Block> JUNGLE_LOGS = BlockTags.create("jungle_logs");
+    public static final TagKey<Block> SPRUCE_LOGS = BlockTags.create("spruce_logs");
+    public static final TagKey<Block> CRIMSON_STEMS = BlockTags.create("crimson_stems");
+    public static final TagKey<Block> WARPED_STEMS = BlockTags.create("warped_stems");
+    public static final TagKey<Block> BANNERS = BlockTags.create("banners");
+    public static final TagKey<Block> SAND = BlockTags.create("sand");
+    public static final TagKey<Block> STAIRS = BlockTags.create("stairs");
+    public static final TagKey<Block> SLABS = BlockTags.create("slabs");
+    public static final TagKey<Block> WALLS = BlockTags.create("walls");
+    public static final TagKey<Block> ANVIL = BlockTags.create("anvil");
+    public static final TagKey<Block> RAILS = BlockTags.create("rails");
+    public static final TagKey<Block> LEAVES = BlockTags.create("leaves");
+    public static final TagKey<Block> TRAPDOORS = BlockTags.create("trapdoors");
+    public static final TagKey<Block> SMALL_FLOWERS = BlockTags.create("small_flowers");
+    public static final TagKey<Block> BEDS = BlockTags.create("beds");
+    public static final TagKey<Block> FENCES = BlockTags.create("fences");
+    public static final TagKey<Block> TALL_FLOWERS = BlockTags.create("tall_flowers");
+    public static final TagKey<Block> FLOWERS = BlockTags.create("flowers");
+    public static final TagKey<Block> PIGLIN_REPELLENTS = BlockTags.create("piglin_repellents");
+    public static final TagKey<Block> GOLD_ORES = BlockTags.create("gold_ores");
+    public static final TagKey<Block> IRON_ORES = BlockTags.create("iron_ores");
+    public static final TagKey<Block> DIAMOND_ORES = BlockTags.create("diamond_ores");
+    public static final TagKey<Block> REDSTONE_ORES = BlockTags.create("redstone_ores");
+    public static final TagKey<Block> LAPIS_ORES = BlockTags.create("lapis_ores");
+    public static final TagKey<Block> COAL_ORES = BlockTags.create("coal_ores");
+    public static final TagKey<Block> EMERALD_ORES = BlockTags.create("emerald_ores");
+    public static final TagKey<Block> COPPER_ORES = BlockTags.create("copper_ores");
+    public static final TagKey<Block> NON_FLAMMABLE_WOOD = BlockTags.create("non_flammable_wood");
+    public static final TagKey<Block> CANDLES = BlockTags.create("candles");
+    public static final TagKey<Block> DIRT = BlockTags.create("dirt");
+    public static final TagKey<Block> TERRACOTTA = BlockTags.create("terracotta");
+    public static final TagKey<Block> FLOWER_POTS = BlockTags.create("flower_pots");
+    public static final TagKey<Block> ENDERMAN_HOLDABLE = BlockTags.create("enderman_holdable");
+    public static final TagKey<Block> ICE = BlockTags.create("ice");
+    public static final TagKey<Block> VALID_SPAWN = BlockTags.create("valid_spawn");
+    public static final TagKey<Block> IMPERMEABLE = BlockTags.create("impermeable");
+    public static final TagKey<Block> UNDERWATER_BONEMEALS = BlockTags.create("underwater_bonemeals");
+    public static final TagKey<Block> CORAL_BLOCKS = BlockTags.create("coral_blocks");
+    public static final TagKey<Block> WALL_CORALS = BlockTags.create("wall_corals");
+    public static final TagKey<Block> CORAL_PLANTS = BlockTags.create("coral_plants");
+    public static final TagKey<Block> CORALS = BlockTags.create("corals");
+    public static final TagKey<Block> BAMBOO_PLANTABLE_ON = BlockTags.create("bamboo_plantable_on");
+    public static final TagKey<Block> STANDING_SIGNS = BlockTags.create("standing_signs");
+    public static final TagKey<Block> WALL_SIGNS = BlockTags.create("wall_signs");
+    public static final TagKey<Block> SIGNS = BlockTags.create("signs");
+    public static final TagKey<Block> DRAGON_IMMUNE = BlockTags.create("dragon_immune");
+    public static final TagKey<Block> WITHER_IMMUNE = BlockTags.create("wither_immune");
+    public static final TagKey<Block> WITHER_SUMMON_BASE_BLOCKS = BlockTags.create("wither_summon_base_blocks");
+    public static final TagKey<Block> BEEHIVES = BlockTags.create("beehives");
+    public static final TagKey<Block> CROPS = BlockTags.create("crops");
+    public static final TagKey<Block> BEE_GROWABLES = BlockTags.create("bee_growables");
+    public static final TagKey<Block> PORTALS = BlockTags.create("portals");
+    public static final TagKey<Block> FIRE = BlockTags.create("fire");
+    public static final TagKey<Block> NYLIUM = BlockTags.create("nylium");
+    public static final TagKey<Block> WART_BLOCKS = BlockTags.create("wart_blocks");
+    public static final TagKey<Block> BEACON_BASE_BLOCKS = BlockTags.create("beacon_base_blocks");
+    public static final TagKey<Block> SOUL_SPEED_BLOCKS = BlockTags.create("soul_speed_blocks");
+    public static final TagKey<Block> WALL_POST_OVERRIDE = BlockTags.create("wall_post_override");
+    public static final TagKey<Block> CLIMBABLE = BlockTags.create("climbable");
+    public static final TagKey<Block> FALL_DAMAGE_RESETTING = BlockTags.create("fall_damage_resetting");
+    public static final TagKey<Block> SHULKER_BOXES = BlockTags.create("shulker_boxes");
+    public static final TagKey<Block> HOGLIN_REPELLENTS = BlockTags.create("hoglin_repellents");
+    public static final TagKey<Block> SOUL_FIRE_BASE_BLOCKS = BlockTags.create("soul_fire_base_blocks");
+    public static final TagKey<Block> STRIDER_WARM_BLOCKS = BlockTags.create("strider_warm_blocks");
+    public static final TagKey<Block> CAMPFIRES = BlockTags.create("campfires");
+    public static final TagKey<Block> GUARDED_BY_PIGLINS = BlockTags.create("guarded_by_piglins");
+    public static final TagKey<Block> PREVENT_MOB_SPAWNING_INSIDE = BlockTags.create("prevent_mob_spawning_inside");
+    public static final TagKey<Block> FENCE_GATES = BlockTags.create("fence_gates");
+    public static final TagKey<Block> UNSTABLE_BOTTOM_CENTER = BlockTags.create("unstable_bottom_center");
+    public static final TagKey<Block> MUSHROOM_GROW_BLOCK = BlockTags.create("mushroom_grow_block");
+    public static final TagKey<Block> INFINIBURN_OVERWORLD = BlockTags.create("infiniburn_overworld");
+    public static final TagKey<Block> INFINIBURN_NETHER = BlockTags.create("infiniburn_nether");
+    public static final TagKey<Block> INFINIBURN_END = BlockTags.create("infiniburn_end");
+    public static final TagKey<Block> BASE_STONE_OVERWORLD = BlockTags.create("base_stone_overworld");
+    public static final TagKey<Block> STONE_ORE_REPLACEABLES = BlockTags.create("stone_ore_replaceables");
+    public static final TagKey<Block> DEEPSLATE_ORE_REPLACEABLES = BlockTags.create("deepslate_ore_replaceables");
+    public static final TagKey<Block> BASE_STONE_NETHER = BlockTags.create("base_stone_nether");
+    public static final TagKey<Block> CANDLE_CAKES = BlockTags.create("candle_cakes");
+    public static final TagKey<Block> CAULDRONS = BlockTags.create("cauldrons");
+    public static final TagKey<Block> CRYSTAL_SOUND_BLOCKS = BlockTags.create("crystal_sound_blocks");
+    public static final TagKey<Block> INSIDE_STEP_SOUND_BLOCKS = BlockTags.create("inside_step_sound_blocks");
+    public static final TagKey<Block> OCCLUDES_VIBRATION_SIGNALS = BlockTags.create("occludes_vibration_signals");
+    public static final TagKey<Block> DRIPSTONE_REPLACEABLE = BlockTags.create("dripstone_replaceable_blocks");
+    public static final TagKey<Block> CAVE_VINES = BlockTags.create("cave_vines");
+    public static final TagKey<Block> MOSS_REPLACEABLE = BlockTags.create("moss_replaceable");
+    public static final TagKey<Block> LUSH_GROUND_REPLACEABLE = BlockTags.create("lush_ground_replaceable");
+    public static final TagKey<Block> AZALEA_ROOT_REPLACEABLE = BlockTags.create("azalea_root_replaceable");
+    public static final TagKey<Block> SMALL_DRIPLEAF_PLACEABLE = BlockTags.create("small_dripleaf_placeable");
+    public static final TagKey<Block> BIG_DRIPLEAF_PLACEABLE = BlockTags.create("big_dripleaf_placeable");
+    public static final TagKey<Block> SNOW = BlockTags.create("snow");
+    public static final TagKey<Block> MINEABLE_WITH_AXE = BlockTags.create("mineable/axe");
+    public static final TagKey<Block> MINEABLE_WITH_HOE = BlockTags.create("mineable/hoe");
+    public static final TagKey<Block> MINEABLE_WITH_PICKAXE = BlockTags.create("mineable/pickaxe");
+    public static final TagKey<Block> MINEABLE_WITH_SHOVEL = BlockTags.create("mineable/shovel");
+    public static final TagKey<Block> NEEDS_DIAMOND_TOOL = BlockTags.create("needs_diamond_tool");
+    public static final TagKey<Block> NEEDS_IRON_TOOL = BlockTags.create("needs_iron_tool");
+    public static final TagKey<Block> NEEDS_STONE_TOOL = BlockTags.create("needs_stone_tool");
+    public static final TagKey<Block> FEATURES_CANNOT_REPLACE = BlockTags.create("features_cannot_replace");
+    public static final TagKey<Block> LAVA_POOL_STONE_CANNOT_REPLACE = BlockTags.create("lava_pool_stone_cannot_replace");
+    public static final TagKey<Block> GEODE_INVALID_BLOCKS = BlockTags.create("geode_invalid_blocks");
+    public static final TagKey<Block> ANIMALS_SPAWNABLE_ON = BlockTags.create("animals_spawnable_on");
+    public static final TagKey<Block> AXOLOTLS_SPAWNABLE_ON = BlockTags.create("axolotls_spawnable_on");
+    public static final TagKey<Block> GOATS_SPAWNABLE_ON = BlockTags.create("goats_spawnable_on");
+    public static final TagKey<Block> MOOSHROOMS_SPAWNABLE_ON = BlockTags.create("mooshrooms_spawnable_on");
+    public static final TagKey<Block> PARROTS_SPAWNABLE_ON = BlockTags.create("parrots_spawnable_on");
+    public static final TagKey<Block> POLAR_BEARS_SPAWNABLE_ON_IN_FROZEN_OCEAN = BlockTags.create("polar_bears_spawnable_on_in_frozen_ocean");
+    public static final TagKey<Block> RABBITS_SPAWNABLE_ON = BlockTags.create("rabbits_spawnable_on");
+    public static final TagKey<Block> FOXES_SPAWNABLE_ON = BlockTags.create("foxes_spawnable_on");
+    public static final TagKey<Block> WOLVES_SPAWNABLE_ON = BlockTags.create("wolves_spawnable_on");
+    public static final TagKey<Block> AZALEA_GROWS_ON = BlockTags.create("azalea_grows_on");
+    public static final TagKey<Block> REPLACEABLE_PLANTS = BlockTags.create("replaceable_plants");
+
+    private BlockTags() {
+    }
+
+    private static TagKey<Block> create(String string) {
+        return TagKey.create(Registry.BLOCK_REGISTRY, new ResourceLocation(string));
+    }
+}
+

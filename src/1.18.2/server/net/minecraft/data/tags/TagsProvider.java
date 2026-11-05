@@ -1,0 +1,147 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.common.collect.Maps
+ *  com.google.gson.Gson
+ *  com.google.gson.GsonBuilder
+ *  com.google.gson.JsonElement
+ *  com.google.gson.JsonObject
+ *  com.mojang.logging.LogUtils
+ *  org.slf4j.Logger
+ */
+package net.minecraft.data.tags;
+
+import com.google.common.collect.Maps;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.mojang.logging.LogUtils;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.OpenOption;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileAttribute;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import net.minecraft.core.Registry;
+import net.minecraft.data.DataGenerator;
+import net.minecraft.data.DataProvider;
+import net.minecraft.data.HashCache;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.Tag;
+import net.minecraft.tags.TagKey;
+import net.minecraft.tags.TagManager;
+import org.slf4j.Logger;
+
+public abstract class TagsProvider<T>
+implements DataProvider {
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    protected final DataGenerator generator;
+    protected final Registry<T> registry;
+    private final Map<ResourceLocation, Tag.Builder> builders = Maps.newLinkedHashMap();
+
+    protected TagsProvider(DataGenerator dataGenerator, Registry<T> registry) {
+        this.generator = dataGenerator;
+        this.registry = registry;
+    }
+
+    protected abstract void addTags();
+
+    @Override
+    public void run(HashCache hashCache) {
+        this.builders.clear();
+        this.addTags();
+        this.builders.forEach((resourceLocation, builder) -> {
+            List list = builder.getEntries().filter(builderEntry -> !builderEntry.entry().verifyIfPresent(this.registry::containsKey, this.builders::containsKey)).toList();
+            if (!list.isEmpty()) {
+                throw new IllegalArgumentException(String.format("Couldn't define tag %s as it is missing following references: %s", resourceLocation, list.stream().map(Objects::toString).collect(Collectors.joining(","))));
+            }
+            JsonObject jsonObject = builder.serializeToJson();
+            Path path = this.getPath((ResourceLocation)resourceLocation);
+            try {
+                String string = GSON.toJson((JsonElement)jsonObject);
+                String string2 = SHA1.hashUnencodedChars((CharSequence)string).toString();
+                if (!Objects.equals(hashCache.getHash(path), string2) || !Files.exists(path, new LinkOption[0])) {
+                    Files.createDirectories(path.getParent(), new FileAttribute[0]);
+                    try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path, new OpenOption[0]);){
+                        bufferedWriter.write(string);
+                    }
+                }
+                hashCache.putNew(path, string2);
+            }
+            catch (IOException iOException) {
+                LOGGER.error("Couldn't save tags to {}", (Object)path, (Object)iOException);
+            }
+        });
+    }
+
+    private Path getPath(ResourceLocation resourceLocation) {
+        ResourceKey<Registry<T>> resourceKey = this.registry.key();
+        return this.generator.getOutputFolder().resolve("data/" + resourceLocation.getNamespace() + "/" + TagManager.getTagDir(resourceKey) + "/" + resourceLocation.getPath() + ".json");
+    }
+
+    protected TagAppender<T> tag(TagKey<T> tagKey) {
+        Tag.Builder builder = this.getOrCreateRawBuilder(tagKey);
+        return new TagAppender<T>(builder, this.registry, "vanilla");
+    }
+
+    protected Tag.Builder getOrCreateRawBuilder(TagKey<T> tagKey) {
+        return this.builders.computeIfAbsent(tagKey.location(), resourceLocation -> new Tag.Builder());
+    }
+
+    protected static class TagAppender<T> {
+        private final Tag.Builder builder;
+        private final Registry<T> registry;
+        private final String source;
+
+        TagAppender(Tag.Builder builder, Registry<T> registry, String string) {
+            this.builder = builder;
+            this.registry = registry;
+            this.source = string;
+        }
+
+        public TagAppender<T> add(T t) {
+            this.builder.addElement(this.registry.getKey(t), this.source);
+            return this;
+        }
+
+        @SafeVarargs
+        public final TagAppender<T> add(ResourceKey<T> ... resourceKeyArray) {
+            for (ResourceKey<T> resourceKey : resourceKeyArray) {
+                this.builder.addElement(resourceKey.location(), this.source);
+            }
+            return this;
+        }
+
+        public TagAppender<T> addOptional(ResourceLocation resourceLocation) {
+            this.builder.addOptionalElement(resourceLocation, this.source);
+            return this;
+        }
+
+        public TagAppender<T> addTag(TagKey<T> tagKey) {
+            this.builder.addTag(tagKey.location(), this.source);
+            return this;
+        }
+
+        public TagAppender<T> addOptionalTag(ResourceLocation resourceLocation) {
+            this.builder.addOptionalTag(resourceLocation, this.source);
+            return this;
+        }
+
+        @SafeVarargs
+        public final TagAppender<T> add(T ... TArray) {
+            Stream.of(TArray).map(this.registry::getKey).forEach(resourceLocation -> this.builder.addElement((ResourceLocation)resourceLocation, this.source));
+            return this;
+        }
+    }
+}
+

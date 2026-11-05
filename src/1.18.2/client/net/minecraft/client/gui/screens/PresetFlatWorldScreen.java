@@ -1,0 +1,366 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.common.base.Splitter
+ *  com.google.common.collect.Lists
+ *  com.mojang.logging.LogUtils
+ *  javax.annotation.Nullable
+ *  org.slf4j.Logger
+ */
+package net.minecraft.client.gui.screens;
+
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.logging.LogUtils;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiComponent;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.ObjectSelectionList;
+import net.minecraft.client.gui.screens.CreateFlatWorldScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.HolderSet;
+import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ItemLike;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.levelgen.flat.FlatLayerInfo;
+import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
+import net.minecraft.world.level.levelgen.structure.BuiltinStructureSets;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
+import org.slf4j.Logger;
+
+public class PresetFlatWorldScreen
+extends Screen {
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final int SLOT_TEX_SIZE = 128;
+    private static final int SLOT_BG_SIZE = 18;
+    private static final int SLOT_STAT_HEIGHT = 20;
+    private static final int SLOT_BG_X = 1;
+    private static final int SLOT_BG_Y = 1;
+    private static final int SLOT_FG_X = 2;
+    private static final int SLOT_FG_Y = 2;
+    static final List<PresetInfo> PRESETS = Lists.newArrayList();
+    private static final ResourceKey<Biome> DEFAULT_BIOME = Biomes.PLAINS;
+    final CreateFlatWorldScreen parent;
+    private Component shareText;
+    private Component listText;
+    private PresetsList list;
+    private Button selectButton;
+    EditBox export;
+    FlatLevelGeneratorSettings settings;
+
+    public PresetFlatWorldScreen(CreateFlatWorldScreen createFlatWorldScreen) {
+        super(new TranslatableComponent("createWorld.customize.presets.title"));
+        this.parent = createFlatWorldScreen;
+    }
+
+    @Nullable
+    private static FlatLayerInfo getLayerInfoFromString(String string, int n) {
+        Block block;
+        int n2;
+        String[] stringArray = string.split("\\*", 2);
+        if (stringArray.length == 2) {
+            try {
+                n2 = Math.max(Integer.parseInt(stringArray[0]), 0);
+            }
+            catch (NumberFormatException numberFormatException) {
+                LOGGER.error("Error while parsing flat world string => {}", (Object)numberFormatException.getMessage());
+                return null;
+            }
+        } else {
+            n2 = 1;
+        }
+        int n3 = Math.min(n + n2, DimensionType.Y_SIZE);
+        int n4 = n3 - n;
+        String string2 = stringArray[stringArray.length - 1];
+        try {
+            block = Registry.BLOCK.getOptional(new ResourceLocation(string2)).orElse(null);
+        }
+        catch (Exception exception) {
+            LOGGER.error("Error while parsing flat world string => {}", (Object)exception.getMessage());
+            return null;
+        }
+        if (block == null) {
+            LOGGER.error("Error while parsing flat world string => Unknown block, {}", (Object)string2);
+            return null;
+        }
+        return new FlatLayerInfo(n4, block);
+    }
+
+    private static List<FlatLayerInfo> getLayersInfoFromString(String string) {
+        ArrayList arrayList = Lists.newArrayList();
+        String[] stringArray = string.split(",");
+        int n = 0;
+        for (String string2 : stringArray) {
+            FlatLayerInfo flatLayerInfo = PresetFlatWorldScreen.getLayerInfoFromString(string2, n);
+            if (flatLayerInfo == null) {
+                return Collections.emptyList();
+            }
+            arrayList.add(flatLayerInfo);
+            n += flatLayerInfo.getHeight();
+        }
+        return arrayList;
+    }
+
+    public static FlatLevelGeneratorSettings fromString(Registry<Biome> registry, Registry<StructureSet> registry2, String string, FlatLevelGeneratorSettings flatLevelGeneratorSettings) {
+        Iterator iterator = Splitter.on((char)';').split((CharSequence)string).iterator();
+        if (!iterator.hasNext()) {
+            return FlatLevelGeneratorSettings.getDefault(registry, registry2);
+        }
+        List<FlatLayerInfo> list = PresetFlatWorldScreen.getLayersInfoFromString((String)iterator.next());
+        if (list.isEmpty()) {
+            return FlatLevelGeneratorSettings.getDefault(registry, registry2);
+        }
+        FlatLevelGeneratorSettings flatLevelGeneratorSettings2 = flatLevelGeneratorSettings.withLayers(list, flatLevelGeneratorSettings.structureOverrides());
+        ResourceKey<Biome> resourceKey = DEFAULT_BIOME;
+        if (iterator.hasNext()) {
+            try {
+                ResourceLocation resourceLocation = new ResourceLocation((String)iterator.next());
+                resourceKey = ResourceKey.create(Registry.BIOME_REGISTRY, resourceLocation);
+                registry.getOptional(resourceKey).orElseThrow(() -> new IllegalArgumentException("Invalid Biome: " + resourceLocation));
+            }
+            catch (Exception exception) {
+                LOGGER.error("Error while parsing flat world string => {}", (Object)exception.getMessage());
+                resourceKey = DEFAULT_BIOME;
+            }
+        }
+        flatLevelGeneratorSettings2.setBiome(registry.getOrCreateHolder(resourceKey));
+        return flatLevelGeneratorSettings2;
+    }
+
+    static String save(FlatLevelGeneratorSettings flatLevelGeneratorSettings) {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (int i = 0; i < flatLevelGeneratorSettings.getLayersInfo().size(); ++i) {
+            if (i > 0) {
+                stringBuilder.append(",");
+            }
+            stringBuilder.append(flatLevelGeneratorSettings.getLayersInfo().get(i));
+        }
+        stringBuilder.append(";");
+        stringBuilder.append(flatLevelGeneratorSettings.getBiome().unwrapKey().map(ResourceKey::location).orElseThrow(() -> new IllegalStateException("Biome not registered")));
+        return stringBuilder.toString();
+    }
+
+    @Override
+    protected void init() {
+        this.minecraft.keyboardHandler.setSendRepeatsToGui(true);
+        this.shareText = new TranslatableComponent("createWorld.customize.presets.share");
+        this.listText = new TranslatableComponent("createWorld.customize.presets.list");
+        this.export = new EditBox(this.font, 50, 40, this.width - 100, 20, this.shareText);
+        this.export.setMaxLength(1230);
+        RegistryAccess registryAccess = this.parent.parent.worldGenSettingsComponent.registryHolder();
+        Registry<Biome> registry = registryAccess.registryOrThrow(Registry.BIOME_REGISTRY);
+        Registry<StructureSet> registry2 = registryAccess.registryOrThrow(Registry.STRUCTURE_SET_REGISTRY);
+        this.export.setValue(PresetFlatWorldScreen.save(this.parent.settings()));
+        this.settings = this.parent.settings();
+        this.addWidget(this.export);
+        this.list = new PresetsList();
+        this.addWidget(this.list);
+        this.selectButton = this.addRenderableWidget(new Button(this.width / 2 - 155, this.height - 28, 150, 20, new TranslatableComponent("createWorld.customize.presets.select"), button -> {
+            FlatLevelGeneratorSettings flatLevelGeneratorSettings = PresetFlatWorldScreen.fromString(registry, registry2, this.export.getValue(), this.settings);
+            this.parent.setConfig(flatLevelGeneratorSettings);
+            this.minecraft.setScreen(this.parent);
+        }));
+        this.addRenderableWidget(new Button(this.width / 2 + 5, this.height - 28, 150, 20, CommonComponents.GUI_CANCEL, button -> this.minecraft.setScreen(this.parent)));
+        this.updateButtonValidity(this.list.getSelected() != null);
+    }
+
+    @Override
+    public boolean mouseScrolled(double d, double d2, double d3) {
+        return this.list.mouseScrolled(d, d2, d3);
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int n, int n2) {
+        String string = this.export.getValue();
+        this.init(minecraft, n, n2);
+        this.export.setValue(string);
+    }
+
+    @Override
+    public void onClose() {
+        this.minecraft.setScreen(this.parent);
+    }
+
+    @Override
+    public void removed() {
+        this.minecraft.keyboardHandler.setSendRepeatsToGui(false);
+    }
+
+    @Override
+    public void render(PoseStack poseStack, int n, int n2, float f) {
+        this.renderBackground(poseStack);
+        this.list.render(poseStack, n, n2, f);
+        poseStack.pushPose();
+        poseStack.translate(0.0, 0.0, 400.0);
+        PresetFlatWorldScreen.drawCenteredString(poseStack, this.font, this.title, this.width / 2, 8, 0xFFFFFF);
+        PresetFlatWorldScreen.drawString(poseStack, this.font, this.shareText, 50, 30, 0xA0A0A0);
+        PresetFlatWorldScreen.drawString(poseStack, this.font, this.listText, 50, 70, 0xA0A0A0);
+        poseStack.popPose();
+        this.export.render(poseStack, n, n2, f);
+        super.render(poseStack, n, n2, f);
+    }
+
+    @Override
+    public void tick() {
+        this.export.tick();
+        super.tick();
+    }
+
+    public void updateButtonValidity(boolean bl) {
+        this.selectButton.active = bl || this.export.getValue().length() > 1;
+    }
+
+    private static void preset(Component component, ItemLike itemLike, ResourceKey<Biome> resourceKey, Set<ResourceKey<StructureSet>> set, boolean bl, boolean bl2, FlatLayerInfo ... flatLayerInfoArray) {
+        PRESETS.add(new PresetInfo(itemLike.asItem(), component, registryAccess -> {
+            Registry<Biome> registry = registryAccess.registryOrThrow(Registry.BIOME_REGISTRY);
+            Registry<StructureSet> registry2 = registryAccess.registryOrThrow(Registry.STRUCTURE_SET_REGISTRY);
+            HolderSet.Direct direct = HolderSet.direct(set.stream().flatMap(resourceKey -> registry2.getHolder((ResourceKey<StructureSet>)resourceKey).stream()).collect(Collectors.toList()));
+            FlatLevelGeneratorSettings flatLevelGeneratorSettings = new FlatLevelGeneratorSettings(Optional.of(direct), registry);
+            if (bl) {
+                flatLevelGeneratorSettings.setDecoration();
+            }
+            if (bl2) {
+                flatLevelGeneratorSettings.setAddLakes();
+            }
+            for (int i = flatLayerInfoArray.length - 1; i >= 0; --i) {
+                flatLevelGeneratorSettings.getLayersInfo().add(flatLayerInfoArray[i]);
+            }
+            flatLevelGeneratorSettings.setBiome(registry.getOrCreateHolder(resourceKey));
+            flatLevelGeneratorSettings.updateLayers();
+            return flatLevelGeneratorSettings;
+        }));
+    }
+
+    static {
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.classic_flat"), Blocks.GRASS_BLOCK, Biomes.PLAINS, Set.of(BuiltinStructureSets.VILLAGES), false, false, new FlatLayerInfo(1, Blocks.GRASS_BLOCK), new FlatLayerInfo(2, Blocks.DIRT), new FlatLayerInfo(1, Blocks.BEDROCK));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.tunnelers_dream"), Blocks.STONE, Biomes.WINDSWEPT_HILLS, Set.of(BuiltinStructureSets.MINESHAFTS, BuiltinStructureSets.STRONGHOLDS), true, false, new FlatLayerInfo(1, Blocks.GRASS_BLOCK), new FlatLayerInfo(5, Blocks.DIRT), new FlatLayerInfo(230, Blocks.STONE), new FlatLayerInfo(1, Blocks.BEDROCK));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.water_world"), Items.WATER_BUCKET, Biomes.DEEP_OCEAN, Set.of(BuiltinStructureSets.OCEAN_RUINS, BuiltinStructureSets.SHIPWRECKS, BuiltinStructureSets.OCEAN_MONUMENTS), false, false, new FlatLayerInfo(90, Blocks.WATER), new FlatLayerInfo(5, Blocks.GRAVEL), new FlatLayerInfo(5, Blocks.DIRT), new FlatLayerInfo(5, Blocks.STONE), new FlatLayerInfo(64, Blocks.DEEPSLATE), new FlatLayerInfo(1, Blocks.BEDROCK));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.overworld"), Blocks.GRASS, Biomes.PLAINS, Set.of(BuiltinStructureSets.VILLAGES, BuiltinStructureSets.MINESHAFTS, BuiltinStructureSets.PILLAGER_OUTPOSTS, BuiltinStructureSets.RUINED_PORTALS, BuiltinStructureSets.STRONGHOLDS), true, true, new FlatLayerInfo(1, Blocks.GRASS_BLOCK), new FlatLayerInfo(3, Blocks.DIRT), new FlatLayerInfo(59, Blocks.STONE), new FlatLayerInfo(1, Blocks.BEDROCK));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.snowy_kingdom"), Blocks.SNOW, Biomes.SNOWY_PLAINS, Set.of(BuiltinStructureSets.VILLAGES, BuiltinStructureSets.IGLOOS), false, false, new FlatLayerInfo(1, Blocks.SNOW), new FlatLayerInfo(1, Blocks.GRASS_BLOCK), new FlatLayerInfo(3, Blocks.DIRT), new FlatLayerInfo(59, Blocks.STONE), new FlatLayerInfo(1, Blocks.BEDROCK));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.bottomless_pit"), Items.FEATHER, Biomes.PLAINS, Set.of(BuiltinStructureSets.VILLAGES), false, false, new FlatLayerInfo(1, Blocks.GRASS_BLOCK), new FlatLayerInfo(3, Blocks.DIRT), new FlatLayerInfo(2, Blocks.COBBLESTONE));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.desert"), Blocks.SAND, Biomes.DESERT, Set.of(BuiltinStructureSets.VILLAGES, BuiltinStructureSets.DESERT_PYRAMIDS, BuiltinStructureSets.MINESHAFTS, BuiltinStructureSets.STRONGHOLDS), true, false, new FlatLayerInfo(8, Blocks.SAND), new FlatLayerInfo(52, Blocks.SANDSTONE), new FlatLayerInfo(3, Blocks.STONE), new FlatLayerInfo(1, Blocks.BEDROCK));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.redstone_ready"), Items.REDSTONE, Biomes.DESERT, Set.of(), false, false, new FlatLayerInfo(116, Blocks.SANDSTONE), new FlatLayerInfo(3, Blocks.STONE), new FlatLayerInfo(1, Blocks.BEDROCK));
+        PresetFlatWorldScreen.preset(new TranslatableComponent("createWorld.customize.preset.the_void"), Blocks.BARRIER, Biomes.THE_VOID, Set.of(), true, false, new FlatLayerInfo(1, Blocks.AIR));
+    }
+
+    class PresetsList
+    extends ObjectSelectionList<Entry> {
+        public PresetsList() {
+            super(PresetFlatWorldScreen.this.minecraft, PresetFlatWorldScreen.this.width, PresetFlatWorldScreen.this.height, 80, PresetFlatWorldScreen.this.height - 37, 24);
+            for (PresetInfo presetInfo : PRESETS) {
+                this.addEntry(new Entry(presetInfo));
+            }
+        }
+
+        @Override
+        public void setSelected(@Nullable Entry entry) {
+            super.setSelected(entry);
+            PresetFlatWorldScreen.this.updateButtonValidity(entry != null);
+        }
+
+        @Override
+        protected boolean isFocused() {
+            return PresetFlatWorldScreen.this.getFocused() == this;
+        }
+
+        @Override
+        public boolean keyPressed(int n, int n2, int n3) {
+            if (super.keyPressed(n, n2, n3)) {
+                return true;
+            }
+            if ((n == 257 || n == 335) && this.getSelected() != null) {
+                ((Entry)this.getSelected()).select();
+            }
+            return false;
+        }
+
+        public class Entry
+        extends ObjectSelectionList.Entry<Entry> {
+            private final PresetInfo preset;
+
+            public Entry(PresetInfo presetInfo) {
+                this.preset = presetInfo;
+            }
+
+            @Override
+            public void render(PoseStack poseStack, int n, int n2, int n3, int n4, int n5, int n6, int n7, boolean bl, float f) {
+                this.blitSlot(poseStack, n3, n2, this.preset.icon);
+                PresetFlatWorldScreen.this.font.draw(poseStack, this.preset.name, (float)(n3 + 18 + 5), (float)(n2 + 6), 0xFFFFFF);
+            }
+
+            @Override
+            public boolean mouseClicked(double d, double d2, int n) {
+                if (n == 0) {
+                    this.select();
+                }
+                return false;
+            }
+
+            void select() {
+                PresetsList.this.setSelected(this);
+                PresetFlatWorldScreen.this.settings = this.preset.settings.apply(PresetFlatWorldScreen.this.parent.parent.worldGenSettingsComponent.registryHolder());
+                PresetFlatWorldScreen.this.export.setValue(PresetFlatWorldScreen.save(PresetFlatWorldScreen.this.settings));
+                PresetFlatWorldScreen.this.export.moveCursorToStart();
+            }
+
+            private void blitSlot(PoseStack poseStack, int n, int n2, Item item) {
+                this.blitSlotBg(poseStack, n + 1, n2 + 1);
+                PresetFlatWorldScreen.this.itemRenderer.renderGuiItem(new ItemStack(item), n + 2, n2 + 2);
+            }
+
+            private void blitSlotBg(PoseStack poseStack, int n, int n2) {
+                RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+                RenderSystem.setShaderTexture(0, GuiComponent.STATS_ICON_LOCATION);
+                GuiComponent.blit(poseStack, n, n2, PresetFlatWorldScreen.this.getBlitOffset(), 0.0f, 0.0f, 18, 18, 128, 128);
+            }
+
+            @Override
+            public Component getNarration() {
+                return new TranslatableComponent("narrator.select", this.preset.getName());
+            }
+        }
+    }
+
+    static class PresetInfo {
+        public final Item icon;
+        public final Component name;
+        public final Function<RegistryAccess, FlatLevelGeneratorSettings> settings;
+
+        public PresetInfo(Item item, Component component, Function<RegistryAccess, FlatLevelGeneratorSettings> function) {
+            this.icon = item;
+            this.name = component;
+            this.settings = function;
+        }
+
+        public Component getName() {
+            return this.name;
+        }
+    }
+}
+

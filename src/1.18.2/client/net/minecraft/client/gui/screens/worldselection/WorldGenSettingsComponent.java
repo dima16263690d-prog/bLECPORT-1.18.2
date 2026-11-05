@@ -1,0 +1,281 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.gson.JsonParser
+ *  com.mojang.logging.LogUtils
+ *  com.mojang.serialization.DataResult
+ *  com.mojang.serialization.DataResult$PartialResult
+ *  com.mojang.serialization.JsonOps
+ *  com.mojang.serialization.Lifecycle
+ *  it.unimi.dsi.fastutil.booleans.BooleanConsumer
+ *  org.lwjgl.util.tinyfd.TinyFileDialogs
+ *  org.slf4j.Logger
+ */
+package net.minecraft.client.gui.screens.worldselection;
+
+import com.google.gson.JsonParser;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.logging.LogUtils;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.JsonOps;
+import com.mojang.serialization.Lifecycle;
+import it.unimi.dsi.fastutil.booleans.BooleanConsumer;
+import java.io.BufferedReader;
+import java.io.Reader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.stream.Collectors;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.MultiLineLabel;
+import net.minecraft.client.gui.components.Widget;
+import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.client.gui.screens.ConfirmScreen;
+import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
+import net.minecraft.client.gui.screens.worldselection.WorldPreset;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.WorldStem;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.repository.FolderRepositorySource;
+import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.server.packs.repository.PackSource;
+import net.minecraft.server.packs.repository.ServerPacksSource;
+import net.minecraft.server.packs.resources.MultiPackResourceManager;
+import net.minecraft.world.level.levelgen.WorldGenSettings;
+import org.lwjgl.util.tinyfd.TinyFileDialogs;
+import org.slf4j.Logger;
+
+public class WorldGenSettingsComponent
+implements Widget {
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Component CUSTOM_WORLD_DESCRIPTION = new TranslatableComponent("generator.custom");
+    private static final Component AMPLIFIED_HELP_TEXT = new TranslatableComponent("generator.amplified.info");
+    private static final Component MAP_FEATURES_INFO = new TranslatableComponent("selectWorld.mapFeatures.info");
+    private static final Component SELECT_FILE_PROMPT = new TranslatableComponent("selectWorld.import_worldgen_settings.select_file");
+    private MultiLineLabel amplifiedWorldInfo = MultiLineLabel.EMPTY;
+    private Font font;
+    private int width;
+    private EditBox seedEdit;
+    private CycleButton<Boolean> featuresButton;
+    private CycleButton<Boolean> bonusItemsButton;
+    private CycleButton<WorldPreset> typeButton;
+    private Button customWorldDummyButton;
+    private Button customizeTypeButton;
+    private Button importSettingsButton;
+    private RegistryAccess.Frozen registryHolder;
+    private WorldGenSettings settings;
+    private Optional<WorldPreset> preset;
+    private OptionalLong seed;
+
+    public WorldGenSettingsComponent(RegistryAccess.Frozen frozen, WorldGenSettings worldGenSettings, Optional<WorldPreset> optional, OptionalLong optionalLong) {
+        this.registryHolder = frozen;
+        this.settings = worldGenSettings;
+        this.preset = optional;
+        this.seed = optionalLong;
+    }
+
+    public void init(CreateWorldScreen createWorldScreen, Minecraft minecraft, Font font) {
+        this.font = font;
+        this.width = createWorldScreen.width;
+        this.seedEdit = new EditBox(this.font, this.width / 2 - 100, 60, 200, 20, new TranslatableComponent("selectWorld.enterSeed"));
+        this.seedEdit.setValue(WorldGenSettingsComponent.toString(this.seed));
+        this.seedEdit.setResponder(string -> {
+            this.seed = WorldGenSettings.parseSeed(this.seedEdit.getValue());
+        });
+        createWorldScreen.addWidget(this.seedEdit);
+        int n = this.width / 2 - 155;
+        int n2 = this.width / 2 + 5;
+        this.featuresButton = createWorldScreen.addRenderableWidget(CycleButton.onOffBuilder(this.settings.generateFeatures()).withCustomNarration(cycleButton -> CommonComponents.joinForNarration(cycleButton.createDefaultNarrationMessage(), new TranslatableComponent("selectWorld.mapFeatures.info"))).create(n, 100, 150, 20, new TranslatableComponent("selectWorld.mapFeatures"), (cycleButton, bl) -> {
+            this.settings = this.settings.withFeaturesToggled();
+        }));
+        this.featuresButton.visible = false;
+        this.typeButton = createWorldScreen.addRenderableWidget(CycleButton.builder(WorldPreset::description).withValues(WorldPreset.PRESETS.stream().filter(WorldPreset::isVisibleByDefault).collect(Collectors.toList()), WorldPreset.PRESETS).withCustomNarration(cycleButton -> {
+            if (cycleButton.getValue() == WorldPreset.AMPLIFIED) {
+                return CommonComponents.joinForNarration(cycleButton.createDefaultNarrationMessage(), AMPLIFIED_HELP_TEXT);
+            }
+            return cycleButton.createDefaultNarrationMessage();
+        }).create(n2, 100, 150, 20, new TranslatableComponent("selectWorld.mapType"), (cycleButton, worldPreset) -> {
+            this.preset = Optional.of(worldPreset);
+            this.settings = worldPreset.create(this.registryHolder, this.settings.seed(), this.settings.generateFeatures(), this.settings.generateBonusChest());
+            createWorldScreen.refreshWorldGenSettingsVisibility();
+        }));
+        this.preset.ifPresent(this.typeButton::setValue);
+        this.typeButton.visible = false;
+        this.customWorldDummyButton = createWorldScreen.addRenderableWidget(new Button(n2, 100, 150, 20, CommonComponents.optionNameValue(new TranslatableComponent("selectWorld.mapType"), CUSTOM_WORLD_DESCRIPTION), button -> {}));
+        this.customWorldDummyButton.active = false;
+        this.customWorldDummyButton.visible = false;
+        this.customizeTypeButton = createWorldScreen.addRenderableWidget(new Button(n2, 120, 150, 20, new TranslatableComponent("selectWorld.customizeType"), button -> {
+            WorldPreset.PresetEditor presetEditor = WorldPreset.EDITORS.get(this.preset);
+            if (presetEditor != null) {
+                minecraft.setScreen(presetEditor.createEditScreen(createWorldScreen, this.settings));
+            }
+        }));
+        this.customizeTypeButton.visible = false;
+        this.bonusItemsButton = createWorldScreen.addRenderableWidget(CycleButton.onOffBuilder(this.settings.generateBonusChest() && !createWorldScreen.hardCore).create(n, 151, 150, 20, new TranslatableComponent("selectWorld.bonusItems"), (cycleButton, bl) -> {
+            this.settings = this.settings.withBonusChestToggled();
+        }));
+        this.bonusItemsButton.visible = false;
+        this.importSettingsButton = createWorldScreen.addRenderableWidget(new Button(n, 185, 150, 20, new TranslatableComponent("selectWorld.import_worldgen_settings"), button -> {
+            DataResult dataResult;
+            String string = TinyFileDialogs.tinyfd_openFileDialog((CharSequence)SELECT_FILE_PROMPT.getString(), null, null, null, (boolean)false);
+            if (string == null) {
+                return;
+            }
+            RegistryAccess.Writable writable = RegistryAccess.builtinCopy();
+            try (PackRepository packRepository = new PackRepository(PackType.SERVER_DATA, new ServerPacksSource(), new FolderRepositorySource(createWorldScreen.getTempDataPackDir().toFile(), PackSource.WORLD));){
+                MinecraftServer.configurePackRepository(packRepository, createWorldScreen.dataPacks, false);
+                try (MultiPackResourceManager multiPackResourceManager = new MultiPackResourceManager(PackType.SERVER_DATA, packRepository.openAllSelected());){
+                    Object object;
+                    Object object2;
+                    RegistryOps registryOps = RegistryOps.createAndLoad(JsonOps.INSTANCE, writable, multiPackResourceManager);
+                    try {
+                        object2 = Files.newBufferedReader(Paths.get(string, new String[0]));
+                        try {
+                            object = JsonParser.parseReader((Reader)object2);
+                            dataResult = WorldGenSettings.CODEC.parse(registryOps, object);
+                        }
+                        finally {
+                            if (object2 != null) {
+                                ((BufferedReader)object2).close();
+                            }
+                        }
+                    }
+                    catch (Exception exception) {
+                        dataResult = DataResult.error((String)("Failed to parse file: " + exception.getMessage()));
+                    }
+                    if (dataResult.error().isPresent()) {
+                        object2 = new TranslatableComponent("selectWorld.import_worldgen_settings.failure");
+                        object = ((DataResult.PartialResult)dataResult.error().get()).message();
+                        LOGGER.error("Error parsing world settings: {}", object);
+                        TextComponent textComponent = new TextComponent((String)object);
+                        minecraft.getToasts().addToast(SystemToast.multiline(minecraft, SystemToast.SystemToastIds.WORLD_GEN_SETTINGS_TRANSFER, (Component)object2, textComponent));
+                        return;
+                    }
+                }
+            }
+            packRepository = dataResult.lifecycle();
+            dataResult.resultOrPartial(arg_0 -> ((Logger)LOGGER).error(arg_0)).ifPresent(arg_0 -> this.lambda$init$9(minecraft, createWorldScreen, writable, (Lifecycle)packRepository, arg_0));
+        }));
+        this.importSettingsButton.visible = false;
+        this.amplifiedWorldInfo = MultiLineLabel.create(font, (FormattedText)AMPLIFIED_HELP_TEXT, this.typeButton.getWidth());
+    }
+
+    private void importSettings(RegistryAccess.Frozen frozen, WorldGenSettings worldGenSettings) {
+        this.registryHolder = frozen;
+        this.settings = worldGenSettings;
+        this.preset = WorldPreset.of(worldGenSettings);
+        this.selectWorldTypeButton(true);
+        this.seed = OptionalLong.of(worldGenSettings.seed());
+        this.seedEdit.setValue(WorldGenSettingsComponent.toString(this.seed));
+    }
+
+    public void tick() {
+        this.seedEdit.tick();
+    }
+
+    @Override
+    public void render(PoseStack poseStack, int n, int n2, float f) {
+        if (this.featuresButton.visible) {
+            this.font.drawShadow(poseStack, MAP_FEATURES_INFO, (float)(this.width / 2 - 150), 122.0f, -6250336);
+        }
+        this.seedEdit.render(poseStack, n, n2, f);
+        if (this.preset.equals(Optional.of(WorldPreset.AMPLIFIED))) {
+            this.amplifiedWorldInfo.renderLeftAligned(poseStack, this.typeButton.x + 2, this.typeButton.y + 22, this.font.lineHeight, 0xA0A0A0);
+        }
+    }
+
+    protected void updateSettings(WorldGenSettings worldGenSettings) {
+        this.settings = worldGenSettings;
+    }
+
+    private static String toString(OptionalLong optionalLong) {
+        if (optionalLong.isPresent()) {
+            return Long.toString(optionalLong.getAsLong());
+        }
+        return "";
+    }
+
+    public WorldGenSettings makeSettings(boolean bl) {
+        OptionalLong optionalLong = WorldGenSettings.parseSeed(this.seedEdit.getValue());
+        return this.settings.withSeed(bl, optionalLong);
+    }
+
+    public boolean isDebug() {
+        return this.settings.isDebug();
+    }
+
+    public void setVisibility(boolean bl) {
+        this.selectWorldTypeButton(bl);
+        if (this.settings.isDebug()) {
+            this.featuresButton.visible = false;
+            this.bonusItemsButton.visible = false;
+            this.customizeTypeButton.visible = false;
+            this.importSettingsButton.visible = false;
+        } else {
+            this.featuresButton.visible = bl;
+            this.bonusItemsButton.visible = bl;
+            this.customizeTypeButton.visible = bl && WorldPreset.EDITORS.containsKey(this.preset);
+            this.importSettingsButton.visible = bl;
+        }
+        this.seedEdit.setVisible(bl);
+    }
+
+    private void selectWorldTypeButton(boolean bl) {
+        if (this.preset.isPresent()) {
+            this.typeButton.visible = bl;
+            this.customWorldDummyButton.visible = false;
+        } else {
+            this.typeButton.visible = false;
+            this.customWorldDummyButton.visible = bl;
+        }
+    }
+
+    public RegistryAccess registryHolder() {
+        return this.registryHolder;
+    }
+
+    void updateDataPacks(WorldStem worldStem) {
+        this.settings = worldStem.worldData().worldGenSettings();
+        this.registryHolder = worldStem.registryAccess();
+    }
+
+    public void switchToHardcore() {
+        this.bonusItemsButton.active = false;
+        this.bonusItemsButton.setValue(false);
+    }
+
+    public void switchOutOfHardcode() {
+        this.bonusItemsButton.active = true;
+        this.bonusItemsButton.setValue(this.settings.generateBonusChest());
+    }
+
+    private /* synthetic */ void lambda$init$9(Minecraft minecraft, CreateWorldScreen createWorldScreen, RegistryAccess.Writable writable, Lifecycle lifecycle, WorldGenSettings worldGenSettings) {
+        BooleanConsumer booleanConsumer = bl -> {
+            minecraft.setScreen(createWorldScreen);
+            if (bl) {
+                this.importSettings(writable.freeze(), worldGenSettings);
+            }
+        };
+        if (lifecycle == Lifecycle.stable()) {
+            this.importSettings(writable.freeze(), worldGenSettings);
+        } else if (lifecycle == Lifecycle.experimental()) {
+            minecraft.setScreen(new ConfirmScreen(booleanConsumer, new TranslatableComponent("selectWorld.import_worldgen_settings.experimental.title"), new TranslatableComponent("selectWorld.import_worldgen_settings.experimental.question")));
+        } else {
+            minecraft.setScreen(new ConfirmScreen(booleanConsumer, new TranslatableComponent("selectWorld.import_worldgen_settings.deprecated.title"), new TranslatableComponent("selectWorld.import_worldgen_settings.deprecated.question")));
+        }
+    }
+}
+

@@ -1,0 +1,50 @@
+/*
+ * Decompiled with CFR 0.152.
+ */
+package net.minecraft.client.gui.screens;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Option;
+import net.minecraft.client.Options;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.VolumeSlider;
+import net.minecraft.client.gui.screens.OptionsSubScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.sounds.SoundSource;
+
+public class SoundOptionsScreen
+extends OptionsSubScreen {
+    public SoundOptionsScreen(Screen screen, Options options) {
+        super(screen, options, new TranslatableComponent("options.sounds.title"));
+    }
+
+    @Override
+    protected void init() {
+        int n = this.height / 6 - 12;
+        int n2 = 22;
+        int n3 = 0;
+        this.addRenderableWidget(new VolumeSlider(this.minecraft, this.width / 2 - 155 + n3 % 2 * 160, n + 22 * (n3 >> 1), SoundSource.MASTER, 310));
+        n3 += 2;
+        for (SoundSource soundSource : SoundSource.values()) {
+            if (soundSource == SoundSource.MASTER) continue;
+            this.addRenderableWidget(new VolumeSlider(this.minecraft, this.width / 2 - 155 + n3 % 2 * 160, n + 22 * (n3 >> 1), soundSource, 150));
+            ++n3;
+        }
+        if (n3 % 2 == 1) {
+            ++n3;
+        }
+        this.addRenderableWidget(Option.AUDIO_DEVICE.createButton(this.options, this.width / 2 - 155, n + 22 * (n3 >> 1), 310));
+        this.addRenderableWidget(Option.SHOW_SUBTITLES.createButton(this.options, this.width / 2 - 75, n + 22 * ((n3 += 2) >> 1), 150));
+        this.addRenderableWidget(new Button(this.width / 2 - 100, n + 22 * ((n3 += 2) >> 1), 200, 20, CommonComponents.GUI_DONE, button -> this.minecraft.setScreen(this.lastScreen)));
+    }
+
+    @Override
+    public void render(PoseStack poseStack, int n, int n2, float f) {
+        this.renderBackground(poseStack);
+        SoundOptionsScreen.drawCenteredString(poseStack, this.font, this.title, this.width / 2, 15, 0xFFFFFF);
+        super.render(poseStack, n, n2, f);
+    }
+}
+

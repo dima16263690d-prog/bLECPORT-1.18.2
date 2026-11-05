@@ -1,0 +1,112 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.mojang.brigadier.StringReader
+ *  com.mojang.brigadier.exceptions.CommandSyntaxException
+ *  com.mojang.logging.LogUtils
+ *  javax.annotation.Nullable
+ *  org.slf4j.Logger
+ */
+package net.minecraft.network.chat;
+
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.logging.LogUtils;
+import java.util.Optional;
+import javax.annotation.Nullable;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.selector.EntitySelector;
+import net.minecraft.commands.arguments.selector.EntitySelectorParser;
+import net.minecraft.network.chat.BaseComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentUtils;
+import net.minecraft.network.chat.ContextAwareComponent;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextComponent;
+import net.minecraft.world.entity.Entity;
+import org.slf4j.Logger;
+
+public class SelectorComponent
+extends BaseComponent
+implements ContextAwareComponent {
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private final String pattern;
+    @Nullable
+    private final EntitySelector selector;
+    protected final Optional<Component> separator;
+
+    public SelectorComponent(String string, Optional<Component> optional) {
+        this.pattern = string;
+        this.separator = optional;
+        EntitySelector entitySelector = null;
+        try {
+            EntitySelectorParser entitySelectorParser = new EntitySelectorParser(new StringReader(string));
+            entitySelector = entitySelectorParser.parse();
+        }
+        catch (CommandSyntaxException commandSyntaxException) {
+            LOGGER.warn("Invalid selector component: {}: {}", (Object)string, (Object)commandSyntaxException.getMessage());
+        }
+        this.selector = entitySelector;
+    }
+
+    public String getPattern() {
+        return this.pattern;
+    }
+
+    @Nullable
+    public EntitySelector getSelector() {
+        return this.selector;
+    }
+
+    public Optional<Component> getSeparator() {
+        return this.separator;
+    }
+
+    @Override
+    public MutableComponent resolve(@Nullable CommandSourceStack commandSourceStack, @Nullable Entity entity, int n) throws CommandSyntaxException {
+        if (commandSourceStack == null || this.selector == null) {
+            return new TextComponent("");
+        }
+        Optional<MutableComponent> optional = ComponentUtils.updateForEntity(commandSourceStack, this.separator, entity, n);
+        return ComponentUtils.formatList(this.selector.findEntities(commandSourceStack), optional, Entity::getDisplayName);
+    }
+
+    @Override
+    public String getContents() {
+        return this.pattern;
+    }
+
+    @Override
+    public SelectorComponent plainCopy() {
+        return new SelectorComponent(this.pattern, this.separator);
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (object instanceof SelectorComponent) {
+            SelectorComponent selectorComponent = (SelectorComponent)object;
+            return this.pattern.equals(selectorComponent.pattern) && super.equals(object);
+        }
+        return false;
+    }
+
+    @Override
+    public String toString() {
+        return "SelectorComponent{pattern='" + this.pattern + "', siblings=" + this.siblings + ", style=" + this.getStyle() + "}";
+    }
+
+    @Override
+    public /* synthetic */ BaseComponent plainCopy() {
+        return this.plainCopy();
+    }
+
+    @Override
+    public /* synthetic */ MutableComponent plainCopy() {
+        return this.plainCopy();
+    }
+}
+

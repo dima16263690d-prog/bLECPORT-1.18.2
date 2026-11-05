@@ -1,0 +1,196 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.gson.JsonObject
+ *  com.mojang.brigadier.StringReader
+ *  com.mojang.brigadier.arguments.ArgumentType
+ *  com.mojang.brigadier.context.CommandContext
+ *  com.mojang.brigadier.exceptions.CommandSyntaxException
+ *  com.mojang.brigadier.exceptions.DynamicCommandExceptionType
+ *  com.mojang.brigadier.suggestion.Suggestions
+ *  com.mojang.brigadier.suggestion.SuggestionsBuilder
+ *  com.mojang.datafixers.util.Either
+ */
+package net.minecraft.commands.arguments;
+
+import com.google.gson.JsonObject;
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.arguments.ArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mojang.datafixers.util.Either;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.synchronization.ArgumentSerializer;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
+
+public class ResourceOrTagLocationArgument<T>
+implements ArgumentType<Result<T>> {
+    private static final Collection<String> EXAMPLES = Arrays.asList("foo", "foo:bar", "012", "#skeletons", "#minecraft:skeletons");
+    private static final DynamicCommandExceptionType ERROR_INVALID_BIOME = new DynamicCommandExceptionType(object -> new TranslatableComponent("commands.locatebiome.invalid", object));
+    private static final DynamicCommandExceptionType ERROR_INVALID_STRUCTURE = new DynamicCommandExceptionType(object -> new TranslatableComponent("commands.locate.invalid", object));
+    final ResourceKey<? extends Registry<T>> registryKey;
+
+    public ResourceOrTagLocationArgument(ResourceKey<? extends Registry<T>> resourceKey) {
+        this.registryKey = resourceKey;
+    }
+
+    public static <T> ResourceOrTagLocationArgument<T> resourceOrTag(ResourceKey<? extends Registry<T>> resourceKey) {
+        return new ResourceOrTagLocationArgument<T>(resourceKey);
+    }
+
+    private static <T> Result<T> getRegistryType(CommandContext<CommandSourceStack> commandContext, String string, ResourceKey<Registry<T>> resourceKey, DynamicCommandExceptionType dynamicCommandExceptionType) throws CommandSyntaxException {
+        Result result = (Result)commandContext.getArgument(string, Result.class);
+        Optional<Result<T>> optional = result.cast(resourceKey);
+        return optional.orElseThrow(() -> dynamicCommandExceptionType.create((Object)result));
+    }
+
+    public static Result<Biome> getBiome(CommandContext<CommandSourceStack> commandContext, String string) throws CommandSyntaxException {
+        return ResourceOrTagLocationArgument.getRegistryType(commandContext, string, Registry.BIOME_REGISTRY, ERROR_INVALID_BIOME);
+    }
+
+    public static Result<ConfiguredStructureFeature<?, ?>> getStructureFeature(CommandContext<CommandSourceStack> commandContext, String string) throws CommandSyntaxException {
+        return ResourceOrTagLocationArgument.getRegistryType(commandContext, string, Registry.CONFIGURED_STRUCTURE_FEATURE_REGISTRY, ERROR_INVALID_STRUCTURE);
+    }
+
+    public Result<T> parse(StringReader stringReader) throws CommandSyntaxException {
+        if (stringReader.canRead() && stringReader.peek() == '#') {
+            int n = stringReader.getCursor();
+            try {
+                stringReader.skip();
+                ResourceLocation resourceLocation = ResourceLocation.read(stringReader);
+                return new TagResult(TagKey.create(this.registryKey, resourceLocation));
+            }
+            catch (CommandSyntaxException commandSyntaxException) {
+                stringReader.setCursor(n);
+                throw commandSyntaxException;
+            }
+        }
+        ResourceLocation resourceLocation = ResourceLocation.read(stringReader);
+        return new ResourceResult(ResourceKey.create(this.registryKey, resourceLocation));
+    }
+
+    public <S> CompletableFuture<Suggestions> listSuggestions(CommandContext<S> commandContext, SuggestionsBuilder suggestionsBuilder) {
+        Object object = commandContext.getSource();
+        if (object instanceof SharedSuggestionProvider) {
+            SharedSuggestionProvider sharedSuggestionProvider = (SharedSuggestionProvider)object;
+            return sharedSuggestionProvider.suggestRegistryElements(this.registryKey, SharedSuggestionProvider.ElementSuggestionType.ALL, suggestionsBuilder, commandContext);
+        }
+        return suggestionsBuilder.buildFuture();
+    }
+
+    public Collection<String> getExamples() {
+        return EXAMPLES;
+    }
+
+    public /* synthetic */ Object parse(StringReader stringReader) throws CommandSyntaxException {
+        return this.parse(stringReader);
+    }
+
+    public static interface Result<T>
+    extends Predicate<Holder<T>> {
+        public Either<ResourceKey<T>, TagKey<T>> unwrap();
+
+        public <E> Optional<Result<E>> cast(ResourceKey<? extends Registry<E>> var1);
+
+        public String asPrintable();
+    }
+
+    record TagResult<T>(TagKey<T> key) implements Result<T>
+    {
+        @Override
+        public Either<ResourceKey<T>, TagKey<T>> unwrap() {
+            return Either.right(this.key);
+        }
+
+        @Override
+        public <E> Optional<Result<E>> cast(ResourceKey<? extends Registry<E>> resourceKey) {
+            return this.key.cast(resourceKey).map(TagResult::new);
+        }
+
+        @Override
+        public boolean test(Holder<T> holder) {
+            return holder.is(this.key);
+        }
+
+        @Override
+        public String asPrintable() {
+            return "#" + this.key.location();
+        }
+
+        @Override
+        public /* synthetic */ boolean test(Object object) {
+            return this.test((Holder)object);
+        }
+    }
+
+    record ResourceResult<T>(ResourceKey<T> key) implements Result<T>
+    {
+        @Override
+        public Either<ResourceKey<T>, TagKey<T>> unwrap() {
+            return Either.left(this.key);
+        }
+
+        @Override
+        public <E> Optional<Result<E>> cast(ResourceKey<? extends Registry<E>> resourceKey) {
+            return this.key.cast(resourceKey).map(ResourceResult::new);
+        }
+
+        @Override
+        public boolean test(Holder<T> holder) {
+            return holder.is(this.key);
+        }
+
+        @Override
+        public String asPrintable() {
+            return this.key.location().toString();
+        }
+
+        @Override
+        public /* synthetic */ boolean test(Object object) {
+            return this.test((Holder)object);
+        }
+    }
+
+    public static class Serializer
+    implements ArgumentSerializer<ResourceOrTagLocationArgument<?>> {
+        @Override
+        public void serializeToNetwork(ResourceOrTagLocationArgument<?> resourceOrTagLocationArgument, FriendlyByteBuf friendlyByteBuf) {
+            friendlyByteBuf.writeResourceLocation(resourceOrTagLocationArgument.registryKey.location());
+        }
+
+        @Override
+        public ResourceOrTagLocationArgument<?> deserializeFromNetwork(FriendlyByteBuf friendlyByteBuf) {
+            ResourceLocation resourceLocation = friendlyByteBuf.readResourceLocation();
+            return new ResourceOrTagLocationArgument(ResourceKey.createRegistryKey(resourceLocation));
+        }
+
+        @Override
+        public void serializeToJson(ResourceOrTagLocationArgument<?> resourceOrTagLocationArgument, JsonObject jsonObject) {
+            jsonObject.addProperty("registry", resourceOrTagLocationArgument.registryKey.location().toString());
+        }
+
+        @Override
+        public /* synthetic */ ArgumentType deserializeFromNetwork(FriendlyByteBuf friendlyByteBuf) {
+            return this.deserializeFromNetwork(friendlyByteBuf);
+        }
+    }
+}
+

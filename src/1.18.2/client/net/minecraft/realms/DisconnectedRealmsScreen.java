@@ -1,0 +1,58 @@
+/*
+ * Decompiled with CFR 0.152.
+ */
+package net.minecraft.realms;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineLabel;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.TextComponent;
+import net.minecraft.realms.RealmsScreen;
+
+public class DisconnectedRealmsScreen
+extends RealmsScreen {
+    private final Component reason;
+    private MultiLineLabel message = MultiLineLabel.EMPTY;
+    private final Screen parent;
+    private int textHeight;
+
+    public DisconnectedRealmsScreen(Screen screen, Component component, Component component2) {
+        super(component);
+        this.parent = screen;
+        this.reason = component2;
+    }
+
+    @Override
+    public void init() {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.setConnectedToRealms(false);
+        minecraft.getClientPackSource().clearServerPack();
+        this.message = MultiLineLabel.create(this.font, (FormattedText)this.reason, this.width - 50);
+        this.textHeight = this.message.getLineCount() * this.font.lineHeight;
+        this.addRenderableWidget(new Button(this.width / 2 - 100, this.height / 2 + this.textHeight / 2 + this.font.lineHeight, 200, 20, CommonComponents.GUI_BACK, button -> minecraft.setScreen(this.parent)));
+    }
+
+    @Override
+    public Component getNarrationMessage() {
+        return new TextComponent("").append(this.title).append(": ").append(this.reason);
+    }
+
+    @Override
+    public void onClose() {
+        Minecraft.getInstance().setScreen(this.parent);
+    }
+
+    @Override
+    public void render(PoseStack poseStack, int n, int n2, float f) {
+        this.renderBackground(poseStack);
+        DisconnectedRealmsScreen.drawCenteredString(poseStack, this.font, this.title, this.width / 2, this.height / 2 - this.textHeight / 2 - this.font.lineHeight * 2, 0xAAAAAA);
+        this.message.renderCentered(poseStack, this.width / 2, this.height / 2 - this.textHeight / 2);
+        super.render(poseStack, n, n2, f);
+    }
+}
+

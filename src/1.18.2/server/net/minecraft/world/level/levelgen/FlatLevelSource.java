@@ -1,0 +1,147 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.mojang.datafixers.kinds.App
+ *  com.mojang.datafixers.kinds.Applicative
+ *  com.mojang.serialization.Codec
+ *  com.mojang.serialization.codecs.RecordCodecBuilder
+ */
+package net.minecraft.world.level.levelgen;
+
+import com.mojang.datafixers.kinds.App;
+import com.mojang.datafixers.kinds.Applicative;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.NoiseColumn;
+import net.minecraft.world.level.StructureFeatureManager;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.world.level.biome.Climate;
+import net.minecraft.world.level.biome.FixedBiomeSource;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.levelgen.GenerationStep;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.blending.Blender;
+import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
+
+public class FlatLevelSource
+extends ChunkGenerator {
+    public static final Codec<FlatLevelSource> CODEC = RecordCodecBuilder.create(instance -> FlatLevelSource.commonCodec(instance).and((App)FlatLevelGeneratorSettings.CODEC.fieldOf("settings").forGetter(FlatLevelSource::settings)).apply((Applicative)instance, instance.stable(FlatLevelSource::new)));
+    private final FlatLevelGeneratorSettings settings;
+
+    public FlatLevelSource(Registry<StructureSet> registry, FlatLevelGeneratorSettings flatLevelGeneratorSettings) {
+        super(registry, flatLevelGeneratorSettings.structureOverrides(), new FixedBiomeSource(flatLevelGeneratorSettings.getBiomeFromSettings()), new FixedBiomeSource(flatLevelGeneratorSettings.getBiome()), 0L);
+        this.settings = flatLevelGeneratorSettings;
+    }
+
+    @Override
+    protected Codec<? extends ChunkGenerator> codec() {
+        return CODEC;
+    }
+
+    @Override
+    public ChunkGenerator withSeed(long l) {
+        return this;
+    }
+
+    public FlatLevelGeneratorSettings settings() {
+        return this.settings;
+    }
+
+    @Override
+    public void buildSurface(WorldGenRegion worldGenRegion, StructureFeatureManager structureFeatureManager, ChunkAccess chunkAccess) {
+    }
+
+    @Override
+    public int getSpawnHeight(LevelHeightAccessor levelHeightAccessor) {
+        return levelHeightAccessor.getMinBuildHeight() + Math.min(levelHeightAccessor.getHeight(), this.settings.getLayers().size());
+    }
+
+    @Override
+    protected Holder<Biome> adjustBiome(Holder<Biome> holder) {
+        return this.settings.getBiome();
+    }
+
+    @Override
+    public CompletableFuture<ChunkAccess> fillFromNoise(Executor executor, Blender blender, StructureFeatureManager structureFeatureManager, ChunkAccess chunkAccess) {
+        List<BlockState> list = this.settings.getLayers();
+        BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos();
+        Heightmap heightmap = chunkAccess.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR_WG);
+        Heightmap heightmap2 = chunkAccess.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG);
+        for (int i = 0; i < Math.min(chunkAccess.getHeight(), list.size()); ++i) {
+            BlockState blockState = list.get(i);
+            if (blockState == null) continue;
+            int n = chunkAccess.getMinBuildHeight() + i;
+            for (int j = 0; j < 16; ++j) {
+                for (int k = 0; k < 16; ++k) {
+                    chunkAccess.setBlockState(mutableBlockPos.set(j, n, k), blockState, false);
+                    heightmap.update(j, n, k, blockState);
+                    heightmap2.update(j, n, k, blockState);
+                }
+            }
+        }
+        return CompletableFuture.completedFuture(chunkAccess);
+    }
+
+    @Override
+    public int getBaseHeight(int n, int n2, Heightmap.Types types, LevelHeightAccessor levelHeightAccessor) {
+        List<BlockState> list = this.settings.getLayers();
+        for (int i = Math.min(list.size(), levelHeightAccessor.getMaxBuildHeight()) - 1; i >= 0; --i) {
+            BlockState blockState = list.get(i);
+            if (blockState == null || !types.isOpaque().test(blockState)) continue;
+            return levelHeightAccessor.getMinBuildHeight() + i + 1;
+        }
+        return levelHeightAccessor.getMinBuildHeight();
+    }
+
+    @Override
+    public NoiseColumn getBaseColumn(int n, int n2, LevelHeightAccessor levelHeightAccessor) {
+        return new NoiseColumn(levelHeightAccessor.getMinBuildHeight(), (BlockState[])this.settings.getLayers().stream().limit(levelHeightAccessor.getHeight()).map(blockState -> blockState == null ? Blocks.AIR.defaultBlockState() : blockState).toArray(BlockState[]::new));
+    }
+
+    @Override
+    public void addDebugScreenInfo(List<String> list, BlockPos blockPos) {
+    }
+
+    @Override
+    public Climate.Sampler climateSampler() {
+        return Climate.empty();
+    }
+
+    @Override
+    public void applyCarvers(WorldGenRegion worldGenRegion, long l, BiomeManager biomeManager, StructureFeatureManager structureFeatureManager, ChunkAccess chunkAccess, GenerationStep.Carving carving) {
+    }
+
+    @Override
+    public void spawnOriginalMobs(WorldGenRegion worldGenRegion) {
+    }
+
+    @Override
+    public int getMinY() {
+        return 0;
+    }
+
+    @Override
+    public int getGenDepth() {
+        return 384;
+    }
+
+    @Override
+    public int getSeaLevel() {
+        return -63;
+    }
+}
+

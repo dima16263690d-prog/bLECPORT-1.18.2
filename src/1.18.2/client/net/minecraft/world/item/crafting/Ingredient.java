@@ -1,0 +1,238 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.common.collect.Lists
+ *  com.google.gson.JsonArray
+ *  com.google.gson.JsonElement
+ *  com.google.gson.JsonObject
+ *  com.google.gson.JsonParseException
+ *  com.google.gson.JsonSyntaxException
+ *  it.unimi.dsi.fastutil.ints.IntArrayList
+ *  it.unimi.dsi.fastutil.ints.IntComparators
+ *  it.unimi.dsi.fastutil.ints.IntList
+ *  javax.annotation.Nullable
+ */
+package net.minecraft.world.item.crafting;
+
+import com.google.common.collect.Lists;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonSyntaxException;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntComparators;
+import it.unimi.dsi.fastutil.ints.IntList;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+import javax.annotation.Nullable;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.world.entity.player.StackedContents;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.minecraft.world.level.ItemLike;
+
+public final class Ingredient
+implements Predicate<ItemStack> {
+    public static final Ingredient EMPTY = new Ingredient(Stream.empty());
+    private final Value[] values;
+    @Nullable
+    private ItemStack[] itemStacks;
+    @Nullable
+    private IntList stackingIds;
+
+    private Ingredient(Stream<? extends Value> stream) {
+        this.values = (Value[])stream.toArray(Value[]::new);
+    }
+
+    public ItemStack[] getItems() {
+        this.dissolve();
+        return this.itemStacks;
+    }
+
+    private void dissolve() {
+        if (this.itemStacks == null) {
+            this.itemStacks = (ItemStack[])Arrays.stream(this.values).flatMap(value -> value.getItems().stream()).distinct().toArray(ItemStack[]::new);
+        }
+    }
+
+    @Override
+    public boolean test(@Nullable ItemStack itemStack) {
+        if (itemStack == null) {
+            return false;
+        }
+        this.dissolve();
+        if (this.itemStacks.length == 0) {
+            return itemStack.isEmpty();
+        }
+        for (ItemStack itemStack2 : this.itemStacks) {
+            if (!itemStack2.is(itemStack.getItem())) continue;
+            return true;
+        }
+        return false;
+    }
+
+    public IntList getStackingIds() {
+        if (this.stackingIds == null) {
+            this.dissolve();
+            this.stackingIds = new IntArrayList(this.itemStacks.length);
+            for (ItemStack itemStack : this.itemStacks) {
+                this.stackingIds.add(StackedContents.getStackingIndex(itemStack));
+            }
+            this.stackingIds.sort(IntComparators.NATURAL_COMPARATOR);
+        }
+        return this.stackingIds;
+    }
+
+    public void toNetwork(FriendlyByteBuf friendlyByteBuf) {
+        this.dissolve();
+        friendlyByteBuf.writeCollection(Arrays.asList(this.itemStacks), FriendlyByteBuf::writeItem);
+    }
+
+    public JsonElement toJson() {
+        if (this.values.length == 1) {
+            return this.values[0].serialize();
+        }
+        JsonArray jsonArray = new JsonArray();
+        for (Value value : this.values) {
+            jsonArray.add((JsonElement)value.serialize());
+        }
+        return jsonArray;
+    }
+
+    public boolean isEmpty() {
+        return !(this.values.length != 0 || this.itemStacks != null && this.itemStacks.length != 0 || this.stackingIds != null && !this.stackingIds.isEmpty());
+    }
+
+    private static Ingredient fromValues(Stream<? extends Value> stream) {
+        Ingredient ingredient = new Ingredient(stream);
+        return ingredient.values.length == 0 ? EMPTY : ingredient;
+    }
+
+    public static Ingredient of() {
+        return EMPTY;
+    }
+
+    public static Ingredient of(ItemLike ... itemLikeArray) {
+        return Ingredient.of(Arrays.stream(itemLikeArray).map(ItemStack::new));
+    }
+
+    public static Ingredient of(ItemStack ... itemStackArray) {
+        return Ingredient.of(Arrays.stream(itemStackArray));
+    }
+
+    public static Ingredient of(Stream<ItemStack> stream) {
+        return Ingredient.fromValues(stream.filter(itemStack -> !itemStack.isEmpty()).map(ItemValue::new));
+    }
+
+    public static Ingredient of(TagKey<Item> tagKey) {
+        return Ingredient.fromValues(Stream.of(new TagValue(tagKey)));
+    }
+
+    public static Ingredient fromNetwork(FriendlyByteBuf friendlyByteBuf) {
+        return Ingredient.fromValues(friendlyByteBuf.readList(FriendlyByteBuf::readItem).stream().map(ItemValue::new));
+    }
+
+    public static Ingredient fromJson(@Nullable JsonElement jsonElement2) {
+        if (jsonElement2 == null || jsonElement2.isJsonNull()) {
+            throw new JsonSyntaxException("Item cannot be null");
+        }
+        if (jsonElement2.isJsonObject()) {
+            return Ingredient.fromValues(Stream.of(Ingredient.valueFromJson(jsonElement2.getAsJsonObject())));
+        }
+        if (jsonElement2.isJsonArray()) {
+            JsonArray jsonArray = jsonElement2.getAsJsonArray();
+            if (jsonArray.size() == 0) {
+                throw new JsonSyntaxException("Item array cannot be empty, at least one item must be defined");
+            }
+            return Ingredient.fromValues(StreamSupport.stream(jsonArray.spliterator(), false).map(jsonElement -> Ingredient.valueFromJson(GsonHelper.convertToJsonObject(jsonElement, "item"))));
+        }
+        throw new JsonSyntaxException("Expected item to be object or array of objects");
+    }
+
+    private static Value valueFromJson(JsonObject jsonObject) {
+        if (jsonObject.has("item") && jsonObject.has("tag")) {
+            throw new JsonParseException("An ingredient entry is either a tag or an item, not both");
+        }
+        if (jsonObject.has("item")) {
+            Item item = ShapedRecipe.itemFromJson(jsonObject);
+            return new ItemValue(new ItemStack(item));
+        }
+        if (jsonObject.has("tag")) {
+            ResourceLocation resourceLocation = new ResourceLocation(GsonHelper.getAsString(jsonObject, "tag"));
+            TagKey<Item> tagKey = TagKey.create(Registry.ITEM_REGISTRY, resourceLocation);
+            return new TagValue(tagKey);
+        }
+        throw new JsonParseException("An ingredient entry needs either a tag or an item");
+    }
+
+    @Override
+    public /* synthetic */ boolean test(@Nullable Object object) {
+        return this.test((ItemStack)object);
+    }
+
+    static interface Value {
+        public Collection<ItemStack> getItems();
+
+        public JsonObject serialize();
+    }
+
+    static class TagValue
+    implements Value {
+        private final TagKey<Item> tag;
+
+        TagValue(TagKey<Item> tagKey) {
+            this.tag = tagKey;
+        }
+
+        @Override
+        public Collection<ItemStack> getItems() {
+            ArrayList arrayList = Lists.newArrayList();
+            for (Holder<Item> holder : Registry.ITEM.getTagOrEmpty(this.tag)) {
+                arrayList.add(new ItemStack(holder));
+            }
+            return arrayList;
+        }
+
+        @Override
+        public JsonObject serialize() {
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("tag", this.tag.location().toString());
+            return jsonObject;
+        }
+    }
+
+    static class ItemValue
+    implements Value {
+        private final ItemStack item;
+
+        ItemValue(ItemStack itemStack) {
+            this.item = itemStack;
+        }
+
+        @Override
+        public Collection<ItemStack> getItems() {
+            return Collections.singleton(this.item);
+        }
+
+        @Override
+        public JsonObject serialize() {
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("item", Registry.ITEM.getKey(this.item.getItem()).toString());
+            return jsonObject;
+        }
+    }
+}
+

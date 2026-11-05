@@ -1,0 +1,63 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.google.common.collect.ImmutableSet
+ *  com.mojang.serialization.Codec
+ *  org.apache.commons.lang3.mutable.MutableBoolean
+ */
+package net.minecraft.world.level.levelgen.carver;
+
+import com.google.common.collect.ImmutableSet;
+import com.mojang.serialization.Codec;
+import java.util.Random;
+import java.util.function.Function;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.CarvingMask;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.levelgen.Aquifer;
+import net.minecraft.world.level.levelgen.carver.CarvingContext;
+import net.minecraft.world.level.levelgen.carver.CaveCarverConfiguration;
+import net.minecraft.world.level.levelgen.carver.CaveWorldCarver;
+import net.minecraft.world.level.material.Fluids;
+import org.apache.commons.lang3.mutable.MutableBoolean;
+
+public class NetherWorldCarver
+extends CaveWorldCarver {
+    public NetherWorldCarver(Codec<CaveCarverConfiguration> codec) {
+        super(codec);
+        this.replaceableBlocks = ImmutableSet.of((Object)Blocks.STONE, (Object)Blocks.GRANITE, (Object)Blocks.DIORITE, (Object)Blocks.ANDESITE, (Object)Blocks.DIRT, (Object)Blocks.COARSE_DIRT, (Object[])new Block[]{Blocks.PODZOL, Blocks.GRASS_BLOCK, Blocks.NETHERRACK, Blocks.SOUL_SAND, Blocks.SOUL_SOIL, Blocks.CRIMSON_NYLIUM, Blocks.WARPED_NYLIUM, Blocks.NETHER_WART_BLOCK, Blocks.WARPED_WART_BLOCK, Blocks.BASALT, Blocks.BLACKSTONE});
+        this.liquids = ImmutableSet.of((Object)Fluids.LAVA, (Object)Fluids.WATER);
+    }
+
+    @Override
+    protected int getCaveBound() {
+        return 10;
+    }
+
+    @Override
+    protected float getThickness(Random random) {
+        return (random.nextFloat() * 2.0f + random.nextFloat()) * 2.0f;
+    }
+
+    @Override
+    protected double getYScale() {
+        return 5.0;
+    }
+
+    @Override
+    protected boolean carveBlock(CarvingContext carvingContext, CaveCarverConfiguration caveCarverConfiguration, ChunkAccess chunkAccess, Function<BlockPos, Holder<Biome>> function, CarvingMask carvingMask, BlockPos.MutableBlockPos mutableBlockPos, BlockPos.MutableBlockPos mutableBlockPos2, Aquifer aquifer, MutableBoolean mutableBoolean) {
+        if (this.canReplaceBlock(chunkAccess.getBlockState(mutableBlockPos))) {
+            BlockState blockState = mutableBlockPos.getY() <= carvingContext.getMinGenY() + 31 ? LAVA.createLegacyBlock() : CAVE_AIR;
+            chunkAccess.setBlockState(mutableBlockPos, blockState, false);
+            return true;
+        }
+        return false;
+    }
+}
+
